@@ -95,19 +95,10 @@ def get_timeoff_summary(cpfs, start_date, end_date, admissoes_dict=None):
     cpf_list = [c.strip() for c in str(cpfs).split(',') if c.strip()]
     cpf_map = {normalizar_cpf(c): c for c in cpf_list if normalizar_cpf(c)}
 
-    body = {
-        "StartDate": format_date(start_date),
-        "EndDate": format_date(end_date),
-        "UserIds": ",".join(cpf_map.keys()) if cpf_map else str(cpfs),
-    }
-
-    payload = _geovictoria_request("/TimeOff/Get", body=body, token=token)
-
-    # Se o payload for uma lista, as entradas são o próprio payload
-    if isinstance(payload, list):
-        entries = payload
-    else:
-        entries = (
+    def extrair_entradas(payload):
+        if isinstance(payload, list):
+            return payload
+        return (
             payload.get("TimeOff")
             or payload.get("timeOff")
             or payload.get("Data")
@@ -117,6 +108,49 @@ def get_timeoff_summary(cpfs, start_date, end_date, admissoes_dict=None):
             or []
         )
 
+    def buscar_por_cpfs(cpfs_consulta):
+        body = {
+            "StartDate": format_date(start_date),
+            "EndDate": format_date(end_date),
+            "UserIds": ",".join(cpfs_consulta),
+        }
+        payload = _geovictoria_request("/TimeOff/Get", body=body, token=token)
+        return extrair_entradas(payload)
+
+    try:
+        entries = buscar_por_cpfs(cpf_map.keys()) if cpf_map else []
+    except Exception:
+        # CPF com zero inicial pode gerar HTTP 400 na GeoVictoria. Trata como
+        # ausência de retorno para seguir com as tentativas sem o zero inicial.
+        entries = []
+    cpf_original_por_consulta = dict(cpf_map)
+    cpfs_respondidos = {
+        normalizar_cpf(entry.get("UserIdentifier", ""))
+        for entry in entries
+        if normalizar_cpf(entry.get("UserIdentifier", ""))
+    }
+
+    # Alguns cadastros na GeoVictoria omitem zeros à esquerda. Para cada CPF sem
+    # retorno, tenta novamente removendo somente um zero inicial por requisição.
+    for cpf_original, cpf_exibicao in cpf_map.items():
+        if cpf_original in cpfs_respondidos:
+            continue
+
+        cpf_tentativa = cpf_original
+        while cpf_tentativa.startswith("0"):
+            cpf_tentativa = cpf_tentativa[1:]
+            try:
+                entradas_tentativa = buscar_por_cpfs([cpf_tentativa])
+            except Exception:
+                continue
+            cpf_original_por_consulta[cpf_tentativa] = cpf_exibicao
+            entries.extend(entradas_tentativa)
+
+            if any(
+                normalizar_cpf(entry.get("UserIdentifier", "")) == cpf_tentativa
+                for entry in entradas_tentativa
+            ):
+                break
     # Inicializa o dicionário de resultados usando as chaves dos CPFs originais solicitados
     results = {c: {"faltas": 0, "atestados": 0, "total": 0} for c in cpf_list}
 
@@ -133,10 +167,10 @@ def get_timeoff_summary(cpfs, start_date, end_date, admissoes_dict=None):
         entry_cpf = str(entry.get("UserIdentifier", "")).strip()
         entry_cpf_norm = normalizar_cpf(entry_cpf)
         
-        if not entry_cpf_norm or entry_cpf_norm not in cpf_map:
+        if not entry_cpf_norm or entry_cpf_norm not in cpf_original_por_consulta:
             continue
 
-        original_cpf = cpf_map[entry_cpf_norm]
+        original_cpf = cpf_original_por_consulta[entry_cpf_norm]
         desc = (entry.get("TimeOffTypeDescription", "") or "").upper()
 
         is_falta = "FALTA" in desc
@@ -158,8 +192,9 @@ def get_timeoff_summary(cpfs, start_date, end_date, admissoes_dict=None):
             valid_days = 0
             for i in range(total_period_days):
                 current_day = start_dt + timedelta(days=i)
-                if entry_cpf_norm in admissoes_norm:
-                    colab_admissao = admissoes_norm[entry_cpf_norm]
+                cpf_admissao = normalizar_cpf(original_cpf)
+                if cpf_admissao in admissoes_norm:
+                    colab_admissao = admissoes_norm[cpf_admissao]
                     if colab_admissao and current_day.date() < colab_admissao:
                         continue
                 valid_days += 1

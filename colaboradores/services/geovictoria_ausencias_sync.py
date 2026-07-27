@@ -82,28 +82,68 @@ def sincronizar_ausencias_api(start_date: date, end_date: date, progress_callbac
     for chunk_idx in range(0, total_colabs, chunk_size):
         chunk_cpfs = cpf_list[chunk_idx : chunk_idx + chunk_size]
         
-        body = {
-            "StartDate": format_date(start_date),
-            "EndDate": format_date(end_date),
-            "UserIds": ",".join(chunk_cpfs),
-        }
+        cpf_colab_map_lote = {cpf: colab_map[cpf] for cpf in chunk_cpfs}
+
+        def extrair_entradas(payload):
+            if isinstance(payload, list):
+                return payload
+            return (
+                payload.get("TimeOff")
+                or payload.get("timeOff")
+                or payload.get("Data")
+                or payload.get("data")
+                or payload.get("Result")
+                or payload.get("result")
+                or []
+            )
+
+        def buscar_por_cpfs(cpfs_consulta):
+            body = {
+                "StartDate": format_date(start_date),
+                "EndDate": format_date(end_date),
+                "UserIds": ",".join(cpfs_consulta),
+            }
+            payload = _geovictoria_request("/TimeOff/Get", body=body, token=token)
+            return extrair_entradas(payload)
 
         try:
-            payload = _geovictoria_request("/TimeOff/Get", body=body, token=token)
-            
-            if isinstance(payload, list):
-                entries = payload
-            else:
-                entries = (
-                    payload.get("TimeOff")
-                    or payload.get("timeOff")
-                    or payload.get("Data")
-                    or payload.get("data")
-                    or payload.get("Result")
-                    or payload.get("result")
-                    or []
+            try:
+                entries = buscar_por_cpfs(chunk_cpfs)
+            except Exception as exc:
+                logger.warning(
+                    "Erro no lote completo da GeoVictoria; repetindo CPFs sem zero inicial: %s",
+                    exc,
                 )
+                cpfs_sem_zero_inicial = [cpf for cpf in chunk_cpfs if not cpf.startswith("0")]
+                entries = buscar_por_cpfs(cpfs_sem_zero_inicial) if cpfs_sem_zero_inicial else []
 
+            cpfs_respondidos = {
+                normalizar_cpf(entry.get("UserIdentifier", ""))
+                for entry in entries
+                if normalizar_cpf(entry.get("UserIdentifier", ""))
+            }
+
+            # Aplica fallback somente aos CPFs iniciados em zero e sem retorno.
+            # Agrupa as consultas para não criar uma requisição por colaborador.
+            cpfs_fallback = {}
+            for cpf_original in chunk_cpfs:
+                if cpf_original in cpfs_respondidos or not cpf_original.startswith("0"):
+                    continue
+
+                cpf_tentativa = cpf_original.lstrip("0")
+                if cpf_tentativa:
+                    cpf_colab_map_lote[cpf_tentativa] = colab_map[cpf_original]
+                    cpfs_fallback[cpf_tentativa] = colab_map[cpf_original]
+
+            for fallback_idx in range(0, len(cpfs_fallback), chunk_size):
+                cpfs_tentativa = list(cpfs_fallback.keys())[fallback_idx : fallback_idx + chunk_size]
+                try:
+                    entries.extend(buscar_por_cpfs(cpfs_tentativa))
+                except Exception as exc:
+                    logger.warning(
+                        "Consulta de fallback GeoVictoria falhou para lote de CPFs: %s",
+                        exc,
+                    )
             # Lista temporária de ausências processadas no lote atual
             ausencias_lote = []
 
@@ -111,10 +151,10 @@ def sincronizar_ausencias_api(start_date: date, end_date: date, progress_callbac
                 entry_cpf = str(entry.get("UserIdentifier", "")).strip()
                 entry_cpf_norm = normalizar_cpf(entry_cpf)
                 
-                if not entry_cpf_norm or entry_cpf_norm not in colab_map:
+                if not entry_cpf_norm or entry_cpf_norm not in cpf_colab_map_lote:
                     continue
                 
-                colab = colab_map[entry_cpf_norm]
+                colab = cpf_colab_map_lote[entry_cpf_norm]
                 desc = (entry.get("TimeOffTypeDescription", "") or "").upper()
 
                 # Classificação do tipo de ausência
