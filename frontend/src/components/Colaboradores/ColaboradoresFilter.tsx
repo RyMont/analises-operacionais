@@ -14,6 +14,8 @@ interface ColaboradoresFilterProps {
   // Valores de filtros
   reBusca: string;
   setReBusca: (val: string) => void;
+  cpfBusca: string;
+  setCpfBusca: (val: string) => void;
   nomeBusca: string;
   setNomeBusca: (val: string) => void;
   cargoFiltro: string;
@@ -50,6 +52,8 @@ export default function ColaboradoresFilter({
   activeTab,
   reBusca,
   setReBusca,
+  cpfBusca,
+  setCpfBusca,
   nomeBusca,
   setNomeBusca,
   cargoFiltro,
@@ -258,6 +262,19 @@ export default function ColaboradoresFilter({
               placeholder="Ex: 10023, 10024..."
               value={reBusca}
               onChange={(e) => setReBusca(e.target.value)}
+              className="w-full px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded-lg bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
+              CPF
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: 12345678900"
+              value={cpfBusca}
+              onChange={(e) => setCpfBusca(e.target.value)}
               className="w-full px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded-lg bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
             />
           </div>

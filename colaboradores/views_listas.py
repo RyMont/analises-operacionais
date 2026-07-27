@@ -116,6 +116,7 @@ def _ler_filtros_colaboradores(params):
     return {
         "loja": params.get("loja", ""),
         "re": params.get("re", ""),
+        "cpf": params.get("cpf", ""),
         "nome": params.get("nome", ""),
         "cargo": params.get("cargo", ""),
         "status": params.get("status", ""),
@@ -135,6 +136,7 @@ def _ler_filtros_demitidos(params):
     return {
         "loja": params.get("loja", ""),
         "re": params.get("re", ""),
+        "cpf": params.get("cpf", ""),
         "nome": params.get("nome", ""),
         "cargo": params.get("cargo", ""),
         "status_gestao": params.get("status_gestao", ""),
@@ -191,6 +193,20 @@ def _aplicar_filtros_colaboradores(colaboradores_qs, filtros):
                 q_obj = q_obj | Q(re__isnull=True) | Q(re="")
             colaboradores_qs = colaboradores_qs.filter(q_obj)
 
+    if filtros["cpf"]:
+        cpf_list = [cpf.strip() for cpf in filtros["cpf"].split(",") if cpf.strip()]
+        if cpf_list:
+            has_null = "null" in cpf_list
+            vals = [cpf for cpf in cpf_list if cpf != "null"]
+            q_obj = Q()
+            if vals:
+                q_vals = Q()
+                for cpf in vals:
+                    q_vals = q_vals | Q(cpf__icontains=cpf)
+                q_obj = q_vals
+            if has_null:
+                q_obj = q_obj | Q(cpf__isnull=True) | Q(cpf="")
+            colaboradores_qs = colaboradores_qs.filter(q_obj)
     if filtros["nome"]:
         nome_list = [n.strip() for n in filtros["nome"].split(",") if n.strip()]
         if nome_list:
@@ -313,6 +329,20 @@ def _aplicar_filtros_demitidos(colaboradores_qs, filtros):
                 q_obj = q_obj | Q(re__isnull=True) | Q(re="")
             colaboradores_qs = colaboradores_qs.filter(q_obj)
 
+    if filtros["cpf"]:
+        cpf_list = [cpf.strip() for cpf in filtros["cpf"].split(",") if cpf.strip()]
+        if cpf_list:
+            has_null = "null" in cpf_list
+            vals = [cpf for cpf in cpf_list if cpf != "null"]
+            q_obj = Q()
+            if vals:
+                q_vals = Q()
+                for cpf in vals:
+                    q_vals = q_vals | Q(cpf__icontains=cpf)
+                q_obj = q_vals
+            if has_null:
+                q_obj = q_obj | Q(cpf__isnull=True) | Q(cpf="")
+            colaboradores_qs = colaboradores_qs.filter(q_obj)
     if filtros["nome"]:
         nome_list = [n.strip() for n in filtros["nome"].split(",") if n.strip()]
         if nome_list:

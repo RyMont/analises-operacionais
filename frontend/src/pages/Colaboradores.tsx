@@ -28,6 +28,7 @@ export default function Colaboradores() {
 
   // Estados dos Filtros
   const [reBusca, setReBusca] = useState('');
+  const [cpfBusca, setCpfBusca] = useState('');
   const [nomeBusca, setNomeBusca] = useState('');
   const [cargoFiltro, setCargoFiltro] = useState('');
   const [lojaFiltro, setLojaFiltro] = useState('');
@@ -70,6 +71,7 @@ export default function Colaboradores() {
         params: {
           page: targetPage,
           re: reBusca || undefined,
+          cpf: cpfBusca || undefined,
           nome: nomeBusca || undefined,
           cargo: cargoFiltro || undefined,
           loja: lojaFiltro || undefined,
@@ -173,6 +175,7 @@ export default function Colaboradores() {
       const response = await api.post('/colaboradores/sync-lojas-geovictoria/', {
         loja: lojaFiltro || "",
         re: reBusca || "",
+        cpf: cpfBusca || "",
         nome: nomeBusca || "",
         cargo: cargoFiltro || "",
         status: statusFiltro || "",
@@ -205,6 +208,7 @@ export default function Colaboradores() {
 
   const handleClearFilters = () => {
     setReBusca('');
+    setCpfBusca('');
     setNomeBusca('');
     setCargoFiltro('');
     setLojaFiltro('');
@@ -278,6 +282,8 @@ export default function Colaboradores() {
         activeTab={activeTab}
         reBusca={reBusca}
         setReBusca={setReBusca}
+        cpfBusca={cpfBusca}
+        setCpfBusca={setCpfBusca}
         nomeBusca={nomeBusca}
         setNomeBusca={setNomeBusca}
         cargoFiltro={cargoFiltro}
