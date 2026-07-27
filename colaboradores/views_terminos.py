@@ -321,8 +321,7 @@ def colaborador_geovictoria_details(request, colaborador_id):
             details.append({
                 "tipo": aus.tipo.upper(),
                 "descricao": aus.descricao,
-                "data": aus.data.strftime("%Y-%m-%d"),
-                "observacao": aus.observacao or ""
+                "data": aus.data.strftime("%Y-%m-%d")
             })
         return Response(details)
     except Exception as exc:
