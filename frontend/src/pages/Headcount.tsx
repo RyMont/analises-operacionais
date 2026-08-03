@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   Users, 
   Search, 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { toast } from 'sonner';
+import { useOnClickOutside } from '../hooks/useOnClickOutside';
 
 interface HeadcountRow {
   loja_id: string;
@@ -69,6 +70,8 @@ export default function Headcount() {
   const [colaboradoresDia, setColaboradoresDia] = useState<ColaboradorPresenca[]>([]);
   const [loadingColaboradores, setLoadingColaboradores] = useState(false);
   const [syncingRecente, setSyncingRecente] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, () => setSelectedLoja(null));
 
   // Busca as quantidades agregadas do calendário
   const fetchCalendario = async (lojaId: string, mesAno: string) => {
@@ -435,7 +438,7 @@ export default function Headcount() {
       {/* Modal do Calendário de Presenças GeoVictoria */}
       {selectedLoja && (
         <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto transition-opacity duration-200">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl flex flex-col gap-6 relative max-h-[90vh]">
+          <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl flex flex-col gap-6 relative max-h-[90vh]">
             
             {/* Cabeçalho do Modal */}
             <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-4">

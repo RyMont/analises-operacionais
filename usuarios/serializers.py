@@ -27,15 +27,13 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         """
-        Calcula o papel do usuário para exibição no frontend,
-        centralizando a regra se ele é Administrador, Gestão ou não tem papel associado.
+        Calcula o papel do usuário para exibição no frontend.
         """
-        if obj.is_superuser or obj.groups.filter(name=ADMINISTRADOR_ROLE).exists():
+        if obj.is_superuser:
             return "Administrador"
-        if obj.groups.filter(name=GESTAO_ROLE).exists():
-            return "Gestão"
-        if obj.groups.filter(name=APRENDIZ_ROLE).exists():
-            return "Aprendiz"
+        group = obj.groups.first()
+        if group:
+            return group.name
         return "Sem role"
 
     def get_permissions(self, obj):
@@ -96,9 +94,8 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
     Ele garante que a senha seja salva de forma segura (hasheada) e que o usuário seja criado com as
     permissões e grupos corretos para o respectivo papel de acesso ao sistema.
     """
-    role = serializers.ChoiceField(
-        choices=((ADMINISTRADOR_ROLE, "Administrador"), (GESTAO_ROLE, "Gestão"), (APRENDIZ_ROLE, "Aprendiz")),
-        default=ADMINISTRADOR_ROLE,
+    role = serializers.CharField(
+        default="Administrador",
         required=False
     )
     password = serializers.CharField(write_only=True)
@@ -125,16 +122,16 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """
         Sobrescreve o método de criação padrão para aplicar a lógica de hashing de senha do Django,
-        configurar os flags de superusuário e vincular o usuário ao grupo correto (Administrador ou Gestão).
+        configurar os flags de superusuário e vincular o usuário ao grupo correto.
         """
-        role = validated_data.pop("role", ADMINISTRADOR_ROLE)
+        role = validated_data.pop("role", "Administrador")
         password = validated_data.pop("password")
         
         user = User(**validated_data)
         user.set_password(password)
         user.is_active = True
         
-        if role == ADMINISTRADOR_ROLE:
+        if role.lower() == "administrador":
             user.is_staff = True
             user.is_superuser = True
         else:

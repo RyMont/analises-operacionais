@@ -9,7 +9,7 @@ import axios from 'axios';
  */
 const api = axios.create({
   // Por que existe: Obtém dinamicamente o IP ou host que está acessando o frontend para direcionar as requisições de API ao backend correto.
-  baseURL: `http://${window.location.hostname}:8000`,
+  baseURL: `http://${window.location.hostname}:8001`,
   withCredentials: true,            // Envia cookies (sessão de login) em todas as requisições
   xsrfCookieName: 'csrftoken',      // Nome do cookie do Django para proteção CSRF
   xsrfHeaderName: 'X-CSRFToken',    // Header HTTP que o Django espera para o token CSRF
@@ -39,8 +39,8 @@ api.interceptors.response.use((response) => {
     console.error(
       '💡 DICA DE REDE/CORS:\n' +
       'Se você vir esta mensagem, a requisição ao backend falhou.\n' +
-      '1. Verifique se o servidor Django no backend está rodando com: python manage.py runserver 0.0.0.0:8000\n' +
-      '2. Se o backend estiver rodando, o Firewall do Windows da máquina servidora está bloqueando conexões na porta 8000.\n' +
+      '1. Verifique se o servidor Django no backend está rodando com: python manage.py runserver 0.0.0.0:8001\n' +
+      '2. Se o backend estiver rodando, o Firewall do Windows da máquina servidora está bloqueando conexões na porta 8001.\n' +
       '3. Certifique-se de que ambas as máquinas estão conectadas na mesma rede local e o IP acessado é o correto.'
     );
   }

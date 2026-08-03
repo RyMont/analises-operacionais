@@ -13,8 +13,9 @@ import {
   Loader2, 
   Info,
   CircleDollarSign,
-  AlertOctagon
-} from 'lucide-react';
+  AlertOctagon,
+  Plus,
+  X
 import api from '../../api/client';
 import { toast } from 'sonner';
 import SearchableSelect from '../ui/searchable-select';
@@ -67,6 +68,11 @@ export default function PermissoesAcesso() {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [localPermissions, setLocalPermissions] = useState<PermissionItem[]>([]);
+
+  // States for New Role Modal
+  const [showNewRoleModal, setShowNewRoleModal] = useState<boolean>(false);
+  const [newRoleName, setNewRoleName] = useState<string>('');
+  const [creatingRole, setCreatingRole] = useState<boolean>(false);
 
   useEffect(() => {
     fetchRoles();
@@ -152,6 +158,33 @@ export default function PermissoesAcesso() {
     }
   };
 
+  // Handler para criar nova Role
+  const handleCreateRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoleName.trim()) {
+      toast.error('O nome da função é obrigatório.');
+      return;
+    }
+    setCreatingRole(true);
+    try {
+      const response = await api.post('/usuarios/api/roles/nova/', { name: newRoleName });
+      if (response.data.success) {
+        toast.success(`Função ${response.data.name} criada com sucesso!`);
+        setShowNewRoleModal(false);
+        setNewRoleName('');
+        // Recarrega as roles para incluir a nova e define como selecionada
+        fetchRoles().then(() => {
+          setSelectedRoleId(response.data.id);
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar função:', error);
+      toast.error(error.response?.data?.error || 'Erro ao tentar criar a função.');
+    } finally {
+      setCreatingRole(false);
+    }
+  };
+
   const selectedRole = roles.find(r => r.id === selectedRoleId);
   const isAdministradorRole = selectedRole?.name?.toLowerCase() === 'administrador';
 
@@ -172,13 +205,23 @@ export default function PermissoesAcesso() {
           <label htmlFor="role-select" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
             Função (Role) de Acesso
           </label>
-          <div className="w-full sm:w-64">
-            <SearchableSelect
-              options={roles.map((role) => ({ value: role.id, label: role.name }))}
-              value={selectedRoleId}
-              onChange={handleRoleChange}
-              placeholder="Selecione a função..."
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-full sm:w-64">
+              <SearchableSelect
+                options={roles.map((role) => ({ value: role.id, label: role.name }))}
+                value={selectedRoleId}
+                onChange={handleRoleChange}
+                placeholder="Selecione a função..."
+              />
+            </div>
+            <button
+              onClick={() => setShowNewRoleModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-100 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer h-full"
+              title="Criar Nova Função"
+            >
+              <Plus className="h-4 w-4" />
+              Nova
+            </button>
           </div>
         </div>
 
@@ -306,6 +349,56 @@ export default function PermissoesAcesso() {
           </table>
         </div>
       </div>
+
+      {/* Modal para Nova Role */}
+      {showNewRoleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
+              <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">Criar Nova Função</h3>
+              <button
+                type="button"
+                onClick={() => setShowNewRoleModal(false)}
+                className="p-1 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5 text-neutral-500" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateRole} className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-450 uppercase tracking-wider block">Nome da Função *</label>
+                <input
+                  type="text"
+                  required
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  placeholder="Ex: Supervisor, Operador..."
+                  className="w-full px-4 py-2.5 text-sm bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-800 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewRoleModal(false)}
+                  className="px-5 py-2.5 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingRole || !newRoleName.trim()}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-sm font-bold hover:bg-neutral-800 dark:hover:opacity-90 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {creatingRole && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Criar Função
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -187,42 +187,33 @@ def usuario_update(request, pk):
                 "error": "Você não tem permissão para alterar o papel de acesso."
             }, status=status.HTTP_403_FORBIDDEN)
         
-        role_str = str(role).lower()
-        if role_str not in ["administrador", "gestao", "aprendiz", "sem role"]:
-            return Response({
-                "success": False,
-                "error": "Papel de acesso inválido."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        role_str = str(role)
             
-        if usuario == request.user and role_str != "administrador":
+        if usuario == request.user and role_str.lower() != "administrador":
             return Response({
                 "success": False,
                 "error": "Você não pode rebaixar o seu próprio papel de administrador."
             }, status=status.HTTP_400_BAD_REQUEST)
             
         from django.contrib.auth.models import Group
-        from usuarios.constants import GESTAO_ROLE, ADMINISTRADOR_ROLE, APRENDIZ_ROLE
         
-        administrador_group, _ = Group.objects.get_or_create(name=ADMINISTRADOR_ROLE)
-        gestao_group, _ = Group.objects.get_or_create(name=GESTAO_ROLE)
-        aprendiz_group, _ = Group.objects.get_or_create(name=APRENDIZ_ROLE)
+        usuario.groups.clear()
         
-        usuario.groups.remove(administrador_group)
-        usuario.groups.remove(gestao_group)
-        usuario.groups.remove(aprendiz_group)
-        
-        if role_str == "administrador":
-            usuario.groups.add(administrador_group)
-            usuario.is_superuser = True
-            usuario.is_staff = True
-        elif role_str == "gestao":
-            usuario.groups.add(gestao_group)
-            usuario.is_superuser = False
-            usuario.is_staff = False
-        elif role_str == "aprendiz":
-            usuario.groups.add(aprendiz_group)
-            usuario.is_superuser = False
-            usuario.is_staff = False
+        if role_str.lower() != "sem role":
+            try:
+                group = Group.objects.get(name__iexact=role_str)
+                usuario.groups.add(group)
+                if group.name.lower() == "administrador":
+                    usuario.is_superuser = True
+                    usuario.is_staff = True
+                else:
+                    usuario.is_superuser = False
+                    usuario.is_staff = False
+            except Group.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "error": "Papel de acesso inválido."
+                }, status=status.HTTP_400_BAD_REQUEST)
         else: # Sem role
             usuario.is_superuser = False
             usuario.is_staff = False
@@ -497,3 +488,27 @@ def api_redefinir_senha(request):
         "error": "Este link de redefinição é inválido ou expirou. Solicite um novo link."
     }, status=status.HTTP_400_BAD_REQUEST)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def role_create(request):
+    """
+    Cria uma nova função (Role) no sistema.
+    """
+    from django.contrib.auth.models import Group
+    name = request.data.get("name")
+    
+    if not name:
+        return Response({"success": False, "error": "Nome da função é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if Group.objects.filter(name__iexact=name).exists():
+        return Response({"success": False, "error": "Já existe uma função com este nome."}, status=status.HTTP_400_BAD_REQUEST)
+        
+    group = Group.objects.create(name=name)
+    
+    return Response({
+        "success": True,
+        "message": f"Função {name} criada com sucesso.",
+        "id": group.id,
+        "name": group.name
+    }, status=status.HTTP_201_CREATED)

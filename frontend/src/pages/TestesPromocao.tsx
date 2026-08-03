@@ -182,7 +182,7 @@ export default function TestesPromocao() {
       return;
     }
     // Abre o download do anexo em nova aba
-    const url = `http://${window.location.hostname}:8000/colaboradores/testes/${teste.id}/download/`;
+    const url = `http://${window.location.hostname}:8001/colaboradores/testes/${teste.id}/download/`;
     window.open(url, '_blank');
   };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Calendar, MapPin, User, Copy, Check, FileText } from 'lucide-react';
 import SearchableSelect from '../ui/searchable-select';
 import { statusOptions } from './constants';
@@ -8,6 +8,7 @@ import type { Loja } from '../Lojas/LojasTable';
 import { logoBase64 } from '../../assets/logoBase64';
 import api from '../../api/client';
 import { copyTextToClipboard } from '../../utils/clipboard';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface AgendaActionModalProps {
   isOpen: boolean;
@@ -54,6 +55,8 @@ export function AgendaActionModal({
 }: AgendaActionModalProps) {
   const [copied, setCopied] = useState(false);
   const [localForm, setLocalForm] = useState(initialForm);
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   /**
    * Estado para controlar se a data na carta de apresentação deve ser exibida como "a partir de" a data selecionada.
@@ -304,7 +307,7 @@ export function AgendaActionModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
         
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 shrink-0">

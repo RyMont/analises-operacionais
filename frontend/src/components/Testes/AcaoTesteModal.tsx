@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Loader2, 
@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { formatDate, obterInfoFolhas } from '../../utils/formatters';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import type { TestePromocaoItem } from '../../pages/TestesPromocao';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface AcaoTesteModalProps {
   teste: TestePromocaoItem;
@@ -56,6 +57,8 @@ export default function AcaoTesteModal({ teste, onClose, onSaveSuccess }: AcaoTe
   const [executing, setExecuting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loadingCopy, setLoadingCopy] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   /**
    * Monitora a aba ativa e carrega as ausências do colaborador sob demanda.
@@ -356,7 +359,7 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 shrink-0">
           <div>

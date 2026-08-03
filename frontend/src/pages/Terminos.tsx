@@ -257,7 +257,7 @@ export default function Terminos() {
     if (acaoFiltro) params.append('acao', acaoFiltro);
     
     // Por que existe: Utiliza o hostname dinâmico do navegador para garantir que a requisição de exportação funcione em qualquer máquina que esteja acessando o frontend.
-    const url = `http://${window.location.hostname}:8000/colaboradores/terminos/exportar/?${params.toString()}`;
+    const url = `http://${window.location.hostname}:8001/colaboradores/terminos/exportar/?${params.toString()}`;
     window.open(url, '_blank');
   };
 

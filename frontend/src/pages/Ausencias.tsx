@@ -207,7 +207,7 @@ export default function Ausencias() {
       params.append('filtro_tabela', filtroTabela);
     }
 
-    const url = `http://${window.location.hostname}:8000/colaboradores/ausencias/analise/exportar/?${params.toString()}`;
+    const url = `http://${window.location.hostname}:8001/colaboradores/ausencias/analise/exportar/?${params.toString()}`;
     window.open(url, '_blank');
   };
 

@@ -356,7 +356,7 @@ export default function Colaboradores() {
                   <span className="text-neutral-500">Ação pós-sync:</span>
                   <a 
                     // Por que existe: Direciona o download do CSV para o endereço correto da máquina host (seja localhost ou o IP local) para não quebrar em outras máquinas.
-                    href={`http://${window.location.hostname}:8000/colaboradores/sync-lojas-geovictoria/pendencias/todas/`}
+                    href={`http://${window.location.hostname}:8001/colaboradores/sync-lojas-geovictoria/pendencias/todas/`}
                     target="_blank"
                     rel="noreferrer"
                     className="font-bold text-neutral-900 hover:underline dark:text-neutral-100"

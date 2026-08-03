@@ -4,6 +4,7 @@ import api from '../../api/client';
 import { toast } from 'sonner';
 import { formatDate } from '../../utils/formatters';
 import SearchableSelect from '../ui/searchable-select';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface NovoTesteModalProps {
   onClose: () => void;
@@ -43,6 +44,8 @@ export default function NovoTesteModal({ onClose, onSaveSuccess }: NovoTesteModa
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selecionadoRef = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   // Selecionado
   const [colaborador, setColaborador] = useState<Colaborador | null>(null);
@@ -210,7 +213,7 @@ export default function NovoTesteModal({ onClose, onSaveSuccess }: NovoTesteModa
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 shrink-0">
           <div>
