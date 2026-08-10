@@ -16,6 +16,7 @@ import {
   AlertOctagon,
   Plus,
   X
+} from 'lucide-react';
 import api from '../../api/client';
 import { toast } from 'sonner';
 import SearchableSelect from '../ui/searchable-select';

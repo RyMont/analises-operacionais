@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Loader2, 
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import api from '../../api/client';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton } from '../ui/input-group';
 import FormField from '../ui/form-field';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface PerfilEditModalProps {
   onClose: () => void;
@@ -30,6 +31,9 @@ export default function PerfilEditModal({
   onClose,
   onSaveSuccess,
 }: PerfilEditModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   // Estado local para os dados do usuário atualmente logado
   const [userId, setUserId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -147,7 +151,7 @@ export default function PerfilEditModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
           <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">

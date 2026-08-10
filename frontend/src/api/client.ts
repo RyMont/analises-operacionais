@@ -7,11 +7,20 @@ import axios from 'axios';
  * automaticamente o envio de credenciais (cookies de sessão) e o tratamento
  * de proteção CSRF (Cross-Site Request Forgery) exigido pelo Django.
  */
+/**
+ * Obtém dinamicamente a porta do backend com base na porta em que o frontend está rodando.
+ * Se o frontend estiver rodando na porta de teste (5174), usa o backend de teste na 8001.
+ * Caso contrário, assume a porta de produção (8000).
+ */
+export const getBackendPort = (): string => {
+  return window.location.port === '5174' ? '8001' : '8000';
+};
+
 const api = axios.create({
   // Por que existe: Obtém dinamicamente o IP ou host que está acessando o frontend para direcionar as requisições de API ao backend correto.
-  baseURL: `http://${window.location.hostname}:8001`,
+  baseURL: `http://${window.location.hostname}:${getBackendPort()}`,
   withCredentials: true,            // Envia cookies (sessão de login) em todas as requisições
-  xsrfCookieName: 'csrftoken',      // Nome do cookie do Django para proteção CSRF
+  xsrfCookieName: window.location.port === '5174' ? 'csrftoken_teste' : 'csrftoken', // Evita colisão com os cookies de produção
   xsrfHeaderName: 'X-CSRFToken',    // Header HTTP que o Django espera para o token CSRF
 });
 

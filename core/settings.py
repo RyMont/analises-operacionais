@@ -162,40 +162,67 @@ REST_FRAMEWORK = {
     },
 }
 
+# URL do frontend para compor os links de redefinição de senha e configurar origens dinâmicas do CORS/CSRF
+# Por que existe: Permite gerar o link completo de redefinição de senha apontando para a porta do React.
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+
+# Evita colisão de cookies/sessão ao rodar as instâncias de teste e produção no mesmo IP (como 10.1.1.93 ou localhost).
+# O navegador compartilha cookies entre portas do mesmo domínio, então alteramos os nomes dos cookies na versão de testes (porta 5174).
+if FRONTEND_URL and "5174" in FRONTEND_URL:
+    SESSION_COOKIE_NAME = "sessionid_teste"
+    CSRF_COOKIE_NAME = "csrftoken_teste"
+
 # Permite requisições de origens cruzadas (CORS) para viabilizar a comunicação com o React no frontend.
 # Quando usamos credentials (cookies de sessão), não podemos usar wildcard '*'. Devemos especificar as origens.
 CORS_ALLOW_CREDENTIALS = True
 
 # Por que existe: Define as origens permitidas para conexões CORS e proteção CSRF.
-# Como o frontend roda em uma porta diferente (5173), precisamos liberar o acesso local (localhost e 127.0.0.1)
-# e também detectar dinamicamente o IP da máquina para permitir o acesso de outros dispositivos na mesma rede local.
+# Como o frontend de testes roda em uma porta diferente (ex: 5174), extraímos a porta do FRONTEND_URL
+# e detectamos dinamicamente os IPs da máquina na rede local para aceitar as conexões de rede de outros dispositivos.
 import socket
+from urllib.parse import urlparse
+
+frontend_port = 5173
+if FRONTEND_URL:
+    try:
+        parsed_url = urlparse(FRONTEND_URL)
+        if parsed_url.port:
+            frontend_port = parsed_url.port
+    except Exception:
+        pass
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    f"http://localhost:{frontend_port}",
+    f"http://127.0.0.1:{frontend_port}",
 ]
 
 # Origens confiáveis para proteção CSRF do Django, necessária para requisições POST/PUT/DELETE
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    f"http://localhost:{frontend_port}",
+    f"http://127.0.0.1:{frontend_port}",
 ]
+
+if FRONTEND_URL:
+    clean_url = FRONTEND_URL.rstrip('/')
+    if clean_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(clean_url)
+    if clean_url not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(clean_url)
 
 try:
     hostname = socket.gethostname()
     # Adiciona o nome do computador (hostname) às origens permitidas (tanto em maiúsculas quanto minúsculas)
     if hostname:
-        CORS_ALLOWED_ORIGINS.append(f"http://{hostname.lower()}:5173")
-        CORS_ALLOWED_ORIGINS.append(f"http://{hostname}:5173")
-        CSRF_TRUSTED_ORIGINS.append(f"http://{hostname.lower()}:5173")
-        CSRF_TRUSTED_ORIGINS.append(f"http://{hostname}:5173")
+        CORS_ALLOWED_ORIGINS.append(f"http://{hostname.lower()}:{frontend_port}")
+        CORS_ALLOWED_ORIGINS.append(f"http://{hostname}:{frontend_port}")
+        CSRF_TRUSTED_ORIGINS.append(f"http://{hostname.lower()}:{frontend_port}")
+        CSRF_TRUSTED_ORIGINS.append(f"http://{hostname}:{frontend_port}")
     
     # Adiciona todos os IPs da máquina na rede local
     ips = socket.gethostbyname_ex(hostname)[2]
     for ip in ips:
-        CORS_ALLOWED_ORIGINS.append(f"http://{ip}:5173")
-        CSRF_TRUSTED_ORIGINS.append(f"http://{ip}:5173")
+        CORS_ALLOWED_ORIGINS.append(f"http://{ip}:{frontend_port}")
+        CSRF_TRUSTED_ORIGINS.append(f"http://{ip}:{frontend_port}")
 except Exception:
     pass
 
@@ -209,8 +236,4 @@ EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="onboarding@resend.dev")
-
-# URL do frontend para compor os links de redefinição de senha
-# Por que existe: Permite gerar o link completo de redefinição de senha apontando para a porta do React.
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
 

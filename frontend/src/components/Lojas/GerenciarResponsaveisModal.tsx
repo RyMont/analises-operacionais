@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Edit2, Trash2, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../../api/client';
 import type { Responsavel } from './LojasTable';
 import FormField from '../ui/form-field';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface GerenciarResponsaveisModalProps {
   onClose: () => void;
@@ -21,6 +22,9 @@ export default function GerenciarResponsaveisModal({
   onClose,
   onRefresh,
 }: GerenciarResponsaveisModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   const [activeTab, setActiveTab] = useState<'coordenadores' | 'supervisores'>('coordenadores');
   const [items, setItems] = useState<Responsavel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -162,7 +166,7 @@ export default function GerenciarResponsaveisModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
         
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">

@@ -1,7 +1,9 @@
+import { useRef } from 'react';
 import { User, X, Layers, Calendar } from 'lucide-react';
 import type { Colaborador } from './ColaboradoresTable';
 import { formatDate } from '../../utils/formatters';
 import { getStatusBadge } from '../../utils/badges';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface DetalhesColaboradorModalProps {
   colab: Colaborador;
@@ -19,10 +21,12 @@ export default function DetalhesColaboradorModal({
   colab,
   onClose,
 }: DetalhesColaboradorModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
           <div className="flex items-center gap-3">

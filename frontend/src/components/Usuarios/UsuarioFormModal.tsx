@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Loader2, 
@@ -15,6 +15,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton } from '
 import type { Usuario } from './UsuariosTable';
 import FormField from '../ui/form-field';
 import SearchableSelect from '../ui/searchable-select';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface UsuarioFormModalProps {
   usuario: Usuario | null;
@@ -35,6 +36,9 @@ export default function UsuarioFormModal({
   onClose,
   onSaveSuccess,
 }: UsuarioFormModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   // Estado agrupado para os campos do formulário
   const [formData, setFormData] = useState({
     username: '',
@@ -160,7 +164,7 @@ export default function UsuarioFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
           <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Loader2, Users2, UserX2, Layers, AlertCircle } from 'lucide-react';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import { Progress, ProgressValue } from '../components/ui/progress';
 import ColaboradoresFilter from '../components/Colaboradores/ColaboradoresFilter';
 import ColaboradoresTable, { type Colaborador } from '../components/Colaboradores/ColaboradoresTable';
@@ -356,7 +356,7 @@ export default function Colaboradores() {
                   <span className="text-neutral-500">Ação pós-sync:</span>
                   <a 
                     // Por que existe: Direciona o download do CSV para o endereço correto da máquina host (seja localhost ou o IP local) para não quebrar em outras máquinas.
-                    href={`http://${window.location.hostname}:8001/colaboradores/sync-lojas-geovictoria/pendencias/todas/`}
+                    href={`http://${window.location.hostname}:${getBackendPort()}/colaboradores/sync-lojas-geovictoria/pendencias/todas/`}
                     target="_blank"
                     rel="noreferrer"
                     className="font-bold text-neutral-900 hover:underline dark:text-neutral-100"

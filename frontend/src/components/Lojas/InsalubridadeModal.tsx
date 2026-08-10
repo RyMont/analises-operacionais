@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../../api/client';
 import type { Loja } from './LojasTable';
 import SearchableSelect from '../ui/searchable-select';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface InsalubridadeConfig {
   id?: string;
@@ -33,6 +34,9 @@ export default function InsalubridadeModal({
   loja,
   onClose,
 }: InsalubridadeModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   // Estado local com valores padrão recomendados
   const [insalConfig, setInsalConfig] = useState<InsalubridadeConfig>({
     insalubridade_fixa_percentual: '0.00',
@@ -90,7 +94,7 @@ export default function InsalubridadeModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-lg overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-lg overflow-hidden animate-scale-in">
         {/* Header do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
           <div>

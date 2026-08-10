@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Loader2, X, AlertCircle, FileText, CalendarCheck, TrendingUp, Calculator, Scale, Info, ChevronDown, ChevronUp, User } from 'lucide-react';
 import api from '../../api/client';
 import { formatCurrency } from '../../utils/formatters';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 export interface ResultadoComparativo {
   loja: {
@@ -74,6 +75,9 @@ export default function ComparativoDetalheModal({
   competencia,
   competenciaLabel,
 }: ComparativoDetalheModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   const [resultado, setResultado] = useState<ResultadoComparativo | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -114,7 +118,7 @@ export default function ComparativoDetalheModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-xs">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 w-full max-w-4xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 w-full max-w-4xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100 dark:border-neutral-850 shrink-0">
           <div>

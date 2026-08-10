@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus, Trash2, AlertCircle, Loader2, X } from 'lucide-react';
 import api from '../../api/client';
 import { toast } from 'sonner';
 import SearchableSelect from '../ui/searchable-select';
 import type { Cargo } from './EscoposTable';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface LojaRef {
   id: string;
@@ -30,6 +31,9 @@ export default function EscopoFormModal({
   onClose,
   onRefresh,
 }: EscopoFormModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   // Estados locais do formulário
   const [loja, setLoja] = useState('');
   const [ano, setAno] = useState(new Date().getFullYear());
@@ -129,7 +133,7 @@ export default function EscopoFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-2xl overflow-hidden animate-scale-in">
         {/* Cabeçalho do Modal */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
           <div>

@@ -3,21 +3,16 @@ import {
   CalendarX, 
   Search, 
   AlertTriangle, 
-  TrendingUp, 
-  User, 
-  MapPin, 
   CalendarDays, 
   ChevronDown, 
   ChevronUp, 
   Loader2, 
   SlidersHorizontal,
-  CheckCircle2,
-  AlertOctagon,
   FileText
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import SearchableSelect from '../components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Calendar } from '../components/ui/calendar';
@@ -207,7 +202,7 @@ export default function Ausencias() {
       params.append('filtro_tabela', filtroTabela);
     }
 
-    const url = `http://${window.location.hostname}:8001/colaboradores/ausencias/analise/exportar/?${params.toString()}`;
+    const url = `http://${window.location.hostname}:${getBackendPort()}/colaboradores/ausencias/analise/exportar/?${params.toString()}`;
     window.open(url, '_blank');
   };
 

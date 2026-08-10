@@ -3,7 +3,6 @@ import {
   Store, 
   Users, 
   Clock, 
-  CheckCircle2, 
   ArrowRight,
   Layers,
   TrendingUp,

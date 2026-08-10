@@ -5,6 +5,7 @@ import api from '../../api/client';
 import type { Loja, Responsavel } from './LojasTable';
 import FormField from '../ui/form-field';
 import SearchableSelect from '../ui/searchable-select';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface CadastroLojaModalProps {
   loja: Loja | null;
@@ -34,6 +35,8 @@ export default function CadastroLojaModal({
 }: CadastroLojaModalProps) {
   // Controle de Abas
   const [activeTab, setActiveTab] = useState<'geral' | 'localizacao' | 'responsaveis' | 'integracoes'>('geral');
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   // Estado único para todos os campos do formulário
   const [formData, setFormData] = useState<Partial<Loja>>({});
@@ -399,7 +402,7 @@ export default function CadastroLojaModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className={`bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full transition-all duration-300 overflow-hidden animate-scale-in ${
+      <div ref={modalRef} className={`bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full transition-all duration-300 overflow-hidden animate-scale-in ${
         activeTab === 'localizacao' ? 'max-w-4xl' : 'max-w-xl'
       }`}>
         {/* Header do Modal */}

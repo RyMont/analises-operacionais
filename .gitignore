@@ -38,3 +38,6 @@ staticfiles/
 .DS_Store
 Thumbs.db
 # Migrations não devem ser ignoradas; mantemos elas no Git
+
+# Inicializador local de testes
+iniciar_projeto.bat

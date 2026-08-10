@@ -15,5 +15,6 @@ export default defineConfig({
   // e aceitará conexões externas na rede (host: true) para permitir acesso de outros computadores.
   server: {
     host: '0.0.0.0',
+    port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : undefined,
   },
 })

@@ -253,7 +253,8 @@ erDiagram
 
 ### Pré-requisitos
 -   **Python 3.11+** (Recomendado Python 3.14)
--   **Node.js 18+** (Recomendado Node 20)
+-   **Node.js 18+** (Recomendado Node 24+)
+-   **Yarn** (Necessário para a instalação de dependências do frontend)
 -   **Git** (para controle de versão)
 
 ---

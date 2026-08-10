@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -21,11 +23,14 @@ export default function ConfirmDeleteModal({
   selectedEtapa,
   actionLoading,
 }: ConfirmDeleteModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4 animate-scale-in text-left">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4 animate-scale-in text-left">
         <div className="flex gap-3 text-red-500">
           <AlertCircle className="h-6 w-6 shrink-0" />
           <h4 className="font-bold text-base text-neutral-900 dark:text-neutral-100">

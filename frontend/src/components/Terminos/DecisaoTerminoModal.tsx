@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { TerminoItem } from './TerminosTable';
 import DecisaoTab from './DecisaoTab';
 import AusenciasTab from './AusenciasTab';
+import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 
 interface DecisaoTerminoModalProps {
   item: TerminoItem;
@@ -22,10 +23,12 @@ export default function DecisaoTerminoModal({
   onSaveSuccess,
 }: DecisaoTerminoModalProps) {
   const [activeTab, setActiveTab] = useState<'decisao' | 'detalhes'>('decisao');
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
+      <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 shrink-0">
           <div>

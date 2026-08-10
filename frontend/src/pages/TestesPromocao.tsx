@@ -14,7 +14,7 @@ import {
   ChevronRight,
   UserCheck
 } from 'lucide-react';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import { toast } from 'sonner';
 import { formatDate, obterInfoFolhas, obterFolhaCalendarioReal, converterFolhaParaNumero } from '../utils/formatters';
 import NovoTesteModal from '../components/Testes/NovoTesteModal';
@@ -182,7 +182,7 @@ export default function TestesPromocao() {
       return;
     }
     // Abre o download do anexo em nova aba
-    const url = `http://${window.location.hostname}:8001/colaboradores/testes/${teste.id}/download/`;
+    const url = `http://${window.location.hostname}:${getBackendPort()}/colaboradores/testes/${teste.id}/download/`;
     window.open(url, '_blank');
   };
 

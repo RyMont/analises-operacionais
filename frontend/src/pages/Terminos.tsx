@@ -6,7 +6,7 @@ import {
   CloudLightning,
   CheckCircle2
 } from 'lucide-react';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import { toast } from 'sonner';
 import { Progress } from '../components/ui/progress';
 import TerminosTable, { type TerminoItem } from '../components/Terminos/TerminosTable';
@@ -257,7 +257,7 @@ export default function Terminos() {
     if (acaoFiltro) params.append('acao', acaoFiltro);
     
     // Por que existe: Utiliza o hostname dinâmico do navegador para garantir que a requisição de exportação funcione em qualquer máquina que esteja acessando o frontend.
-    const url = `http://${window.location.hostname}:8001/colaboradores/terminos/exportar/?${params.toString()}`;
+    const url = `http://${window.location.hostname}:${getBackendPort()}/colaboradores/terminos/exportar/?${params.toString()}`;
     window.open(url, '_blank');
   };
 
