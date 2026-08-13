@@ -66,14 +66,24 @@ def headcount_analise_api(request):
         if desvio_loja > 0:
             total_excedentes += desvio_loja
 
-    # Aplica a paginação de lojas na lista
-    paginator = HeadcountPaginacao()
-    page = paginator.paginate_queryset(lojas_list, request)
+    from datetime import timedelta
+    from django.utils import timezone
+    from django.db.models import Count
+    from colaboradores.models import PresencaRelogio
 
-    # Monta os resultados da página
-    resultado = []
-    lojas_pagina = page if page is not None else lojas_list
-    for loja in lojas_pagina:
+    local_today = timezone.localtime(timezone.now()).date()
+    ontem = local_today - timedelta(days=1)
+
+    presencas_ontem_dados = (
+        PresencaRelogio.objects.filter(data=ontem)
+        .values("loja_id")
+        .annotate(count=Count("cpf_original", distinct=True))
+    )
+    presencas_ontem_map = {str(item["loja_id"]): item["count"] for item in presencas_ontem_dados if item["loja_id"]}
+
+    # Monta os resultados de todas as lojas antes de ordenar e paginar
+    resultado_completo = []
+    for loja in lojas_list:
         quadro_planejado = 0
         try:
             quadro_planejado = int(float(str(loja.quadro).strip()))
@@ -81,9 +91,14 @@ def headcount_analise_api(request):
             pass
 
         real = loja.headcount_real
-        desvio = real - quadro_planejado
+        desvio = quadro_planejado - real
 
-        resultado.append({
+        presencas_ontem = presencas_ontem_map.get(str(loja.id), 0)
+        aderencia = 0.0
+        if quadro_planejado > 0:
+            aderencia = round((presencas_ontem / quadro_planejado) * 100, 1)
+
+        resultado_completo.append({
             "loja_id": str(loja.id),
             "nome_referencia": loja.nome_referencia,
             "centro_de_custo": loja.centro_de_custo,
@@ -92,7 +107,29 @@ def headcount_analise_api(request):
             "quadro_planejado": quadro_planejado,
             "headcount_real": real,
             "desvio": desvio,
+            "presencas_ultimo_dia": presencas_ontem,
+            "aderencia": aderencia,
+            "geovictoria_sincronizado_em": loja.geovictoria_sincronizado_em.isoformat() if loja.geovictoria_sincronizado_em else None,
         })
+
+    # Aplica ordenação com base no parâmetro 'ordenacao'
+    ordenacao = request.GET.get("ordenacao", "").strip()
+    if ordenacao == "presencas_desc":
+        resultado_completo.sort(key=lambda x: x["presencas_ultimo_dia"], reverse=True)
+    elif ordenacao == "presencas_asc":
+        resultado_completo.sort(key=lambda x: x["presencas_ultimo_dia"])
+    elif ordenacao == "desvio_desc":
+        resultado_completo.sort(key=lambda x: x["desvio"], reverse=True)
+    elif ordenacao == "desvio_asc":
+        resultado_completo.sort(key=lambda x: x["desvio"])
+    elif ordenacao == "aderencia_desc":
+        resultado_completo.sort(key=lambda x: x["aderencia"], reverse=True)
+    elif ordenacao == "aderencia_asc":
+        resultado_completo.sort(key=lambda x: x["aderencia"])
+
+    # Aplica a paginação de lojas sobre os resultados
+    paginator = HeadcountPaginacao()
+    page = paginator.paginate_queryset(resultado_completo, request)
 
     payload = {
         "kpis": {
@@ -101,7 +138,7 @@ def headcount_analise_api(request):
             "total_excedentes": total_excedentes,
             "total_lojas": len(lojas_list),
         },
-        "resultados": resultado,
+        "resultados": page if page is not None else resultado_completo,
     }
 
     if page is not None:

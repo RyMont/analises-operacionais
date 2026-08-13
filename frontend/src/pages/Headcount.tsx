@@ -27,6 +27,9 @@ interface HeadcountRow {
   quadro_planejado: number;
   headcount_real: number;
   desvio: number;
+  presencas_ultimo_dia: number;
+  aderencia: number;
+  geovictoria_sincronizado_em: string | null;
 }
 
 /**
@@ -51,6 +54,7 @@ export default function Headcount() {
   const [busca, setBusca] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [ordenacao, setOrdenacao] = useState<'default' | 'presencas_desc' | 'presencas_asc' | 'desvio_desc' | 'desvio_asc' | 'aderencia_desc' | 'aderencia_asc'>('default');
 
   // Estados do Modal de Calendário de Presenças GeoVictoria
   interface ColaboradorPresenca {
@@ -62,7 +66,10 @@ export default function Headcount() {
     horario_entrada: string;
   }
   const [selectedLoja, setSelectedLoja] = useState<{ id: string; nome: string } | null>(null);
-  const [anoMes, setAnoMes] = useState('2026-05'); // Inicializa no mês de início sugerido (Maio de 2026)
+  const [anoMes, setAnoMes] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [calendarioDados, setCalendarioDados] = useState<{ [dataStr: string]: number }>({});
   const [loadingCalendario, setLoadingCalendario] = useState(false);
   const [errorCalendario, setErrorCalendario] = useState<string | null>(null);
@@ -70,8 +77,25 @@ export default function Headcount() {
   const [colaboradoresDia, setColaboradoresDia] = useState<ColaboradorPresenca[]>([]);
   const [loadingColaboradores, setLoadingColaboradores] = useState(false);
   const [syncingRecente, setSyncingRecente] = useState(false);
+  const [syncingLojas, setSyncingLojas] = useState<Record<string, boolean>>({});
   const modalRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(modalRef, () => setSelectedLoja(null));
+
+  const formatarDataSincronizacao = (isoString: string | null) => {
+    if (!isoString) return 'Nunca sincronizado';
+    try {
+      const dataObj = new Date(isoString);
+      return dataObj.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return 'Erro ao formatar data';
+    }
+  };
 
   // Busca as quantidades agregadas do calendário
   const fetchCalendario = async (lojaId: string, mesAno: string) => {
@@ -105,10 +129,10 @@ export default function Headcount() {
     }
   };
 
-  // Dispara a sincronização recente da GeoVictoria
-  const handleSyncRecente = async () => {
+  // Dispara a sincronização geral de ontem para todas as filiais
+  const handleSyncGeral = async () => {
     setSyncingRecente(true);
-    const toastId = toast.loading('Sincronizando batidas da GeoVictoria (últimos 3 dias)...');
+    const toastId = toast.loading('Sincronizando batidas de ontem para todas as lojas...');
     
     // Inicia o polling do progresso
     const interval = setInterval(async () => {
@@ -116,7 +140,7 @@ export default function Headcount() {
         const res = await api.get('/lojas/api/presencas/sincronizar-progresso/');
         if (res.data && res.data.page > 0) {
           const totalStr = res.data.total_pages > 0 ? ` de ${res.data.total_pages}` : '';
-          toast.loading(`Sincronizando GeoVictoria: Lendo página ${res.data.page}${totalStr}...`, { id: toastId });
+          toast.loading(`Sincronizando geral: Lendo página ${res.data.page}${totalStr}...`, { id: toastId });
         }
       } catch (err) {
         console.error('Erro ao consultar progresso:', err);
@@ -124,21 +148,47 @@ export default function Headcount() {
     }, 800);
 
     try {
-      await api.post('/lojas/api/presencas/sincronizar-recente/');
+      await api.post('/lojas/api/presencas/sincronizar-geral/');
       clearInterval(interval);
-      toast.success('Sincronização concluída com sucesso!', { id: toastId });
-      if (selectedLoja) {
-        fetchCalendario(selectedLoja.id, anoMes);
-        if (selectedDia) {
-          fetchColaboradoresDia(selectedLoja.id, selectedDia);
-        }
-      }
+      toast.success('Sincronização geral concluída com sucesso!', { id: toastId });
+      fetchHeadcount();
     } catch (err) {
       clearInterval(interval);
       console.error('Erro ao disparar sincronização recente:', err);
       toast.error('Falha ao sincronizar batidas recentes da GeoVictoria.', { id: toastId });
     } finally {
       setSyncingRecente(false);
+    }
+  };
+
+  // Dispara a sincronização individual de uma loja nos últimos 3 dias
+  const handleSyncLoja = async (lojaId: string) => {
+    setSyncingLojas(prev => ({ ...prev, [lojaId]: true }));
+    const toastId = toast.loading('Sincronizando batidas dos últimos 3 dias para esta loja...');
+    
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/lojas/api/presencas/sincronizar-progresso/');
+        if (res.data && res.data.page > 0) {
+          const totalStr = res.data.total_pages > 0 ? ` de ${res.data.total_pages}` : '';
+          toast.loading(`Sincronizando loja: Lendo página ${res.data.page}${totalStr}...`, { id: toastId });
+        }
+      } catch (err) {
+        console.error('Erro ao consultar progresso:', err);
+      }
+    }, 800);
+
+    try {
+      await api.post(`/lojas/api/presencas/sincronizar-loja/${lojaId}/`);
+      clearInterval(interval);
+      toast.success('Sincronização da loja concluída com sucesso!', { id: toastId });
+      fetchHeadcount();
+    } catch (err) {
+      clearInterval(interval);
+      console.error('Erro ao disparar sincronização da loja:', err);
+      toast.error('Falha ao sincronizar batidas recentes desta loja.', { id: toastId });
+    } finally {
+      setSyncingLojas(prev => ({ ...prev, [lojaId]: false }));
     }
   };
 
@@ -190,7 +240,8 @@ export default function Headcount() {
       const response = await api.get('/lojas/headcount/', {
         params: { 
           page: currentPage, 
-          busca: busca 
+          busca: busca,
+          ordenacao: ordenacao === 'default' ? '' : ordenacao
         }
       });
       if (response.data) {
@@ -212,10 +263,43 @@ export default function Headcount() {
     }
   };
 
-  // Dispara a consulta quando a página ou a busca mudarem
+  // Dispara a consulta quando a página, busca ou ordenação mudarem
   useEffect(() => {
     fetchHeadcount();
-  }, [currentPage, busca]);
+  }, [currentPage, busca, ordenacao]);
+
+  const handleToggleOrdenacao = () => {
+    setOrdenacao(prev => {
+      if (prev === 'default' || !prev.startsWith('presencas')) return 'presencas_desc';
+      if (prev === 'presencas_desc') return 'presencas_asc';
+      return 'default';
+    });
+    setCurrentPage(1);
+  };
+
+  const handleToggleOrdenacaoDesvio = () => {
+    setOrdenacao(prev => {
+      if (prev === 'default' || !prev.startsWith('desvio')) return 'desvio_desc';
+      if (prev === 'desvio_desc') return 'desvio_asc';
+      return 'default';
+    });
+    setCurrentPage(1);
+  };
+
+  const handleToggleOrdenacaoAderencia = () => {
+    setOrdenacao(prev => {
+      if (prev === 'default' || !prev.startsWith('aderencia')) return 'aderencia_desc';
+      if (prev === 'aderencia_desc') return 'aderencia_asc';
+      return 'default';
+    });
+    setCurrentPage(1);
+  };
+
+  const handleOpenLoja = (loja: { id: string; nome: string }) => {
+    const d = new Date();
+    setAnoMes(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setSelectedLoja(loja);
+  };
 
 
 
@@ -255,13 +339,13 @@ export default function Headcount() {
 
         <div className="flex items-center gap-2 self-end md:self-auto">
           <button
-            onClick={handleSyncRecente}
+            onClick={handleSyncGeral}
             disabled={syncingRecente}
             className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-active text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed"
-            title="Sincroniza as batidas de entrada de todas as filiais nos últimos 3 dias"
+            title="Sincroniza as batidas de entrada de todas as filiais do dia anterior (ontem)"
           >
             <RefreshCw className={`h-4 w-4 ${syncingRecente ? 'animate-spin' : ''}`} />
-            {syncingRecente ? 'Sincronizando GeoVictoria...' : 'Sincronizar GeoVictoria'}
+            {syncingRecente ? 'Sincronizando Ontem...' : 'Sincronizar Ponto de Ontem'}
           </button>
         </div>
       </div>
@@ -284,7 +368,7 @@ export default function Headcount() {
         {/* Quadro Planejado */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Quadro Planejado Total</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Ativos Totvs Total</span>
             <span className="text-2xl font-extrabold font-mono text-neutral-950 dark:text-neutral-50 block">
               {loading ? '...' : kpis.total_planejado}
             </span>
@@ -297,7 +381,7 @@ export default function Headcount() {
         {/* Headcount Real */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Headcount Real Total</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Quadro Gestão Total</span>
             <span className="text-2xl font-extrabold font-mono text-neutral-950 dark:text-neutral-50 block">
               {loading ? '...' : kpis.total_real}
             </span>
@@ -347,9 +431,57 @@ export default function Headcount() {
                 <th className="py-4 px-6">Loja</th>
                 <th className="py-4 px-4">Cliente</th>
                 <th className="py-4 px-4">Centro de Custo</th>
-                <th className="py-4 px-4 text-center">Quadro Planejado</th>
-                <th className="py-4 px-4 text-center">Headcount Real</th>
-                <th className="py-4 px-4 text-center">Desvio</th>
+                <th className="py-4 px-4 text-center">Ativos Totvs</th>
+                <th className="py-4 px-4 text-center">Quadro Gestão</th>
+                <th 
+                  onClick={handleToggleOrdenacaoDesvio}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
+                  title="Clique para ordenar por desvio"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Desvio</span>
+                    {ordenacao === 'desvio_desc' ? (
+                      <span className="text-primary font-bold">↓</span>
+                    ) : ordenacao === 'desvio_asc' ? (
+                      <span className="text-primary font-bold">↑</span>
+                    ) : (
+                      <span className="text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400">⇅</span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  onClick={handleToggleOrdenacao}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
+                  title="Clique para ordenar por presenças de ontem"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Presenças Ontem</span>
+                    {ordenacao === 'presencas_desc' ? (
+                      <span className="text-primary font-bold">↓</span>
+                    ) : ordenacao === 'presencas_asc' ? (
+                      <span className="text-primary font-bold">↑</span>
+                    ) : (
+                      <span className="text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400">⇅</span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  onClick={handleToggleOrdenacaoAderencia}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
+                  title="Clique para ordenar por presença em relação ao quadro"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Presença/Quadro (%)</span>
+                    {ordenacao === 'aderencia_desc' ? (
+                      <span className="text-primary font-bold">↓</span>
+                    ) : ordenacao === 'aderencia_asc' ? (
+                      <span className="text-primary font-bold">↑</span>
+                    ) : (
+                      <span className="text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400">⇅</span>
+                    )}
+                  </div>
+                </th>
+                <th className="py-4 px-6 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-850">
@@ -362,11 +494,14 @@ export default function Headcount() {
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
+                    <td className="py-4 px-6"><div className="h-6 bg-neutral-100 dark:bg-neutral-800 rounded w-24 mx-auto" /></td>
                   </tr>
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-neutral-400 italic">
+                  <td colSpan={9} className="py-12 text-center text-neutral-400 italic">
                     Nenhuma loja ativa encontrada para os filtros aplicados.
                   </td>
                 </tr>
@@ -376,7 +511,7 @@ export default function Headcount() {
                     <td className="py-4 px-6 font-bold text-neutral-850 dark:text-neutral-200">
                       <div className="flex flex-col gap-0.5">
                         <button
-                          onClick={() => setSelectedLoja({ id: row.loja_id, nome: row.nome_referencia })}
+                          onClick={() => handleOpenLoja({ id: row.loja_id, nome: row.nome_referencia })}
                           className="text-left font-bold text-primary hover:underline hover:text-primary-active focus:outline-none transition-colors"
                           title="Clique para ver o calendário de presenças reais"
                         >
@@ -403,6 +538,23 @@ export default function Headcount() {
                       }`}>
                         {row.desvio > 0 ? `+${row.desvio}` : row.desvio}
                       </span>
+                    </td>
+                    <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">
+                      {row.presencas_ultimo_dia}
+                    </td>
+                    <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">
+                      {row.quadro_planejado > 0 ? `${row.aderencia}%` : '-'}
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <button
+                        onClick={() => handleSyncLoja(row.loja_id)}
+                        disabled={syncingLojas[row.loja_id]}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-850 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 text-[10px] font-bold rounded-lg transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed border border-neutral-200 dark:border-neutral-800 shadow-xs"
+                        title="Sincronizar batidas dos últimos 3 dias desta loja"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${syncingLojas[row.loja_id] ? 'animate-spin' : ''}`} />
+                        Sincronizar 3d
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -473,6 +625,19 @@ export default function Headcount() {
                   className="bg-neutral-55 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-850 text-neutral-800 dark:text-neutral-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-primary font-bold"
                 />
               </div>
+
+              {selectedLoja && (() => {
+                const lojaInfo = data.find(row => row.loja_id === selectedLoja.id);
+                return lojaInfo ? (
+                  <div className="text-[11px] text-neutral-500 font-medium flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-neutral-400" />
+                    <span>Última Sincronização:</span>
+                    <span className="font-bold text-neutral-700 dark:text-neutral-300">
+                      {formatarDataSincronizacao(lojaInfo.geovictoria_sincronizado_em)}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
             </div>
 
             {/* Corpo do Modal em Duas Colunas */}

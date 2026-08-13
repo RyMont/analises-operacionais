@@ -33,11 +33,11 @@ interface ImportStatus {
  */
 export default function Importacoes() {
   const { role, permissions } = useOutletContext<{ role?: string; permissions?: Record<string, any> }>();
-  // Estados para armazenar cada tipo de arquivo selecionado
   const [sraFile, setSraFile] = useState<File | null>(null);
   const [gestaoFile, setGestaoFile] = useState<File | null>(null);
   const [folhaFile, setFolhaFile] = useState<File | null>(null);
   const [turnoverFile, setTurnoverFile] = useState<File | null>(null);
+  const [marcasFile, setMarcasFile] = useState<File | null>(null);
   
   // Novos estados para importação unificada de diárias
   const [diariaSistemaFile, setDiariaSistemaFile] = useState<File | null>(null);
@@ -67,10 +67,11 @@ export default function Importacoes() {
           clearInterval(intervalId);
           setLoading(false);
           // Limpa todos os arquivos da tela após conclusão com sucesso
-          setSraFile(null);
+           setSraFile(null);
           setGestaoFile(null);
           setFolhaFile(null);
           setTurnoverFile(null);
+          setMarcasFile(null);
           setDiariaSistemaFile(null);
           setDiariaManualFile(null);
           setPremioSistemaFile(null);
@@ -91,7 +92,7 @@ export default function Importacoes() {
   };
 
   // Faz o envio (upload) do arquivo para a API correspondente
-  const handleUpload = async (tipo: 'sra' | 'gestao' | 'folha' | 'turnover', file: File | null) => {
+  const handleUpload = async (tipo: 'sra' | 'gestao' | 'folha' | 'turnover' | 'marcas', file: File | null) => {
     if (!file) {
       alert('Selecione um arquivo primeiro.');
       return;
@@ -115,6 +116,7 @@ export default function Importacoes() {
     else if (tipo === 'gestao') endpoint = '/colaboradores/importar-gestao/';
     else if (tipo === 'folha') endpoint = '/folhas/importar/';
     else if (tipo === 'turnover') endpoint = '/colaboradores/importar-turnover/';
+    else if (tipo === 'marcas') endpoint = '/colaboradores/importar-marcas/';
 
     try {
       const response = await api.post(endpoint, formData, {
@@ -316,6 +318,23 @@ export default function Importacoes() {
               loading={loading}
               buttonText="Importar Folha SRD"
               onUpload={() => handleUpload('folha', folhaFile)}
+            />
+
+            {/* Card Relatório de Marcas (GeoVictoria) */}
+            <UploadCard
+              title="Relatório de Marcas (GeoVictoria)"
+              description="Importação das marcações de ponto originais. Formato aceito: Excel (.xlsx, .xlsm, .xls) exportado do GeoVictoria."
+              icon={
+                <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                  <FileSpreadsheet className="h-6 w-6" />
+                </div>
+              }
+              accept=".xlsx,.xlsm,.xls"
+              file={marcasFile}
+              setFile={setMarcasFile}
+              loading={loading}
+              buttonText="Importar Relatório de Marcas"
+              onUpload={() => handleUpload('marcas', marcasFile)}
             />
 
             {/* Card Diárias Operacionais (Unificação de Bases) */}

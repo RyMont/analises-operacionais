@@ -84,10 +84,30 @@ def loja_presencas_dia_api(request, loja_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
-def loja_presencas_sincronizar_recente_api(request):
+def lojas_presencas_sincronizar_geral_api(request):
     """
-    Por que existe: Permite sincronizar em tempo real pelo painel as batidas
-    dos últimos 3 dias na GeoVictoria de forma rápida (sem dar timeout HTTP).
+    Por que existe: Sincroniza em tempo real as batidas do dia anterior (ontem) de todas as lojas.
+    """
+    from colaboradores.services.geovictoria_punches_sync import sincronizar_punches_api
+    
+    ontem = date.today() - timedelta(days=1)
+
+    try:
+        res = sincronizar_punches_api(ontem, ontem, loja_id=None)
+        return Response({
+            "success": True,
+            "message": "Sincronização geral de ontem concluída com sucesso!",
+            "dados": res
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def loja_presencas_sincronizar_individual_api(request, loja_id):
+    """
+    Por que existe: Sincroniza em tempo real as batidas dos últimos 3 dias para uma loja específica.
     """
     from colaboradores.services.geovictoria_punches_sync import sincronizar_punches_api
     
@@ -95,10 +115,10 @@ def loja_presencas_sincronizar_recente_api(request):
     inicio = fim - timedelta(days=3)
 
     try:
-        res = sincronizar_punches_api(inicio, fim)
+        res = sincronizar_punches_api(inicio, fim, loja_id=loja_id)
         return Response({
             "success": True,
-            "message": "Sincronização recente (últimos 3 dias) executada com sucesso!",
+            "message": f"Sincronização individual dos últimos 3 dias concluída com sucesso!",
             "dados": res
         }, status=status.HTTP_200_OK)
     except Exception as e:

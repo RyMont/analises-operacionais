@@ -187,6 +187,11 @@ class Loja(models.Model):
         "Headcount Real (Gestão)",
         default=0,
     )
+    geovictoria_sincronizado_em = models.DateTimeField(
+        "Última Sincronização GeoVictoria",
+        null=True,
+        blank=True,
+    )
 
 
     # ---------------------------------------------------------------

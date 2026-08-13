@@ -310,6 +310,7 @@ class PresencaRelogio(models.Model):
     grupo_geovictoria = models.CharField("Grupo Original GeoVictoria", max_length=255)
     data = models.DateField("Data da Batida", db_index=True)
     data_hora = models.DateTimeField("Data e Hora da Entrada")
+    origem_report = models.BooleanField("Origem Relatório", default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

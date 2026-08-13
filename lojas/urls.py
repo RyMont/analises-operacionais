@@ -52,6 +52,7 @@ urlpatterns = [
     path("importacoes/", configuracoes.importacoes, name="importacoes"),
     path("colaboradores/importar/", configuracoes.colaborador_import_async, name="colaborador_import"),
     path("colaboradores/importar-gestao/", configuracoes.gestao_import_async, name="gestao_import"),
+    path("colaboradores/importar-marcas/", configuracoes.punches_report_import_async, name="punches_report_import"),
     path("import-progress/<str:import_id>/", configuracoes.import_progress, name="import_progress"),
     path("import-status/<str:import_id>/", configuracoes.import_status_api, name="import_status_api"),
     
@@ -62,7 +63,8 @@ urlpatterns = [
     # ========== CALENDÁRIO DE PRESENÇAS GEOVICTORIA ==========
     path("lojas/api/presencas/calendario/<int:loja_id>/", views.loja_presencas_calendario_api, name="loja_presencas_calendario"),
     path("lojas/api/presencas/dia/<int:loja_id>/", views.loja_presencas_dia_api, name="loja_presencas_dia"),
-    path("lojas/api/presencas/sincronizar-recente/", views.loja_presencas_sincronizar_recente_api, name="lojas_presencas_sincronizar_recente"),
+    path("lojas/api/presencas/sincronizar-geral/", views.lojas_presencas_sincronizar_geral_api, name="lojas_presencas_sincronizar_geral"),
+    path("lojas/api/presencas/sincronizar-loja/<int:loja_id>/", views.loja_presencas_sincronizar_individual_api, name="loja_presencas_sincronizar_loja"),
     path("lojas/api/presencas/sincronizar-progresso/", views.loja_presencas_sincronizar_progresso_api, name="lojas_presencas_sincronizar_progresso"),
 
     path("select2/", include("django_select2.urls")),

@@ -115,6 +115,43 @@ def gestao_import_async(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def punches_report_import_async(request):
+    """
+    Inicia a importação assíncrona do Relatório de Marcas/Batidas (Excel) da GeoVictoria.
+    """
+    arquivo = request.FILES.get("arquivo")
+    if not arquivo:
+        return Response({"success": False, "error": "Nenhum arquivo enviado."}, status=status.HTTP_400_BAD_REQUEST)
+
+    nome = (arquivo.name or "").lower()
+    if not (nome.endswith(".xlsx") or nome.endswith(".xlsm") or nome.endswith(".xls")):
+        return Response({
+            "success": False,
+            "error": "Envie uma planilha Excel válida (.xlsx, .xlsm, .xls)."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.user.is_authenticated:
+        from django.contrib.admin.models import LogEntry, CHANGE
+        from django.contrib.contenttypes.models import ContentType
+        from colaboradores.models import PresencaRelogio
+        LogEntry.objects.log_action(
+            user_id=request.user.id,
+            content_type_id=ContentType.objects.get_for_model(PresencaRelogio).pk,
+            object_id=0,
+            object_repr="Importação de Relatório de Marcas (GeoVictoria)",
+            action_flag=CHANGE,
+            change_message=f"Iniciou a importação do relatório de batidas: {arquivo.name}"
+        )
+
+    return _iniciar_importacao_async(
+        tipo_importacao="marcas",
+        payload={"conteudo": arquivo.read(), "nome": arquivo.name or "marcas.xlsx"},
+        titulo="Progresso da Importação do Relatório de Marcas",
+        mensagem_inicial="Iniciando processamento do relatório de batidas...",
+    )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
 def turnover_import_async(request):
     """
     Inicia a importação assíncrona da planilha de Turnover/Termos (terminos.csv).
@@ -461,6 +498,15 @@ def _processar_importacao_background(import_id, tipo_importacao):
                 progress_callback=atualizar_progresso,
             )
             mensagem, status_msg = _montar_mensagem_premio(resultado)
+        elif tipo_importacao == "marcas":
+            from colaboradores.services.geovictoria_report_import import importar_marcas_de_planilha
+            arquivo_excel = BytesIO(payload["conteudo"])
+            arquivo_excel.name = payload.get("nome", "marcas.xlsx")
+            resultado = importar_marcas_de_planilha(
+                arquivo_excel,
+                progress_callback=atualizar_progresso,
+            )
+            mensagem, status_msg = resultado["mensagem"], "success"
         else:
             raise ValueError("Tipo de importacao invalido.")
 

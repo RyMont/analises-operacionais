@@ -38,7 +38,8 @@ from .headcount import headcount_analise_api, headcount_loja_colaboradores_api
 from .presencas import (
     loja_presencas_calendario_api,
     loja_presencas_dia_api,
-    loja_presencas_sincronizar_recente_api,
+    lojas_presencas_sincronizar_geral_api,
+    loja_presencas_sincronizar_individual_api,
     loja_presencas_sincronizar_progresso_api,
 )
 from .salarios import (
@@ -80,7 +81,8 @@ __all__ = [
     "premios_filtro_opcoes_api",
     "loja_presencas_calendario_api",
     "loja_presencas_dia_api",
-    "loja_presencas_sincronizar_recente_api",
+    "lojas_presencas_sincronizar_geral_api",
+    "loja_presencas_sincronizar_individual_api",
     "loja_presencas_sincronizar_progresso_api",
     "salario_list_create_api",
     "salario_detail_update_delete_api",

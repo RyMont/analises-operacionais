@@ -24,7 +24,7 @@ def _geovictoria_request(endpoint, body=None, token=None):
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         # Tentar novamente com auth raw se falhar (conforme lógica do projeto antigo)
@@ -32,7 +32,7 @@ def _geovictoria_request(endpoint, body=None, token=None):
             headers["Authorization"] = token
             req = urllib.request.Request(url, data=data, headers=headers, method="POST")
             try:
-                with urllib.request.urlopen(req) as res:
+                with urllib.request.urlopen(req, timeout=30) as res:
                     return json.loads(res.read().decode("utf-8"))
             except Exception:
                 pass

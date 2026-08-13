@@ -19,6 +19,7 @@ urlpatterns = [
     path('geovictoria/detalhes/<int:colaborador_id>/', views.colaborador_geovictoria_details, name='geovictoria_details'),
     path('importar/', configuracoes.colaborador_import_async, name='importar'),
     path('importar-gestao/', configuracoes.gestao_import_async, name='importar_gestao'),
+    path('importar-marcas/', configuracoes.punches_report_import_async, name='importar_marcas'),
     path('importar-turnover/', configuracoes.turnover_import_async, name='importar_turnover'),
     path('sync-lojas-geovictoria/', views.sync_lojas_geovictoria, name='sync_lojas_geovictoria'),
     path('sync-lojas-geovictoria-progress/', views.sync_lojas_geovictoria_progress, name='sync_lojas_geovictoria_progress'),
