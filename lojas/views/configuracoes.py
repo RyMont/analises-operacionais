@@ -523,6 +523,13 @@ def _processar_importacao_background(import_id, tipo_importacao):
             timeout=600,
         )
 
+        # Dispara cópia/backup atômico para o servidor de rede de forma assíncrona
+        try:
+            from core.services.db_backup import disparar_backup_sqlite_async
+            disparar_backup_sqlite_async()
+        except Exception:
+            pass
+
     except ValueError as exc:
         cache.set(
             f"import_status_{import_id}",
