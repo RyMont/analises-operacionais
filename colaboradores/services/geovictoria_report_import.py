@@ -44,7 +44,7 @@ def importar_marcas_de_planilha(arquivo_excel, progress_callback=None):
     if progress_callback:
         progress_callback(10, "Lendo dados da planilha Excel...")
 
-    df = pd.read_excel(arquivo_excel)
+    df = pd.read_excel(arquivo_excel, skiprows=2)
     total_linhas = len(df)
     
     if total_linhas == 0:
@@ -58,8 +58,7 @@ def importar_marcas_de_planilha(arquivo_excel, progress_callback=None):
     # Resolve nomes de colunas de forma flexível/resiliente
     col_apellidos = next((c for c in df.columns if "apell" in str(c).lower()), None)
     col_rut = next((c for c in df.columns if "rut" in str(c).lower()), None)
-    col_data = next((c for c in df.columns if "data" in str(c).lower() or "fecha" in str(c).lower()), None)
-    col_hora = next((c for c in df.columns if "hora" in str(c).lower()), None)
+    col_fecha = next((c for c in df.columns if "fecha" in str(c).lower() or "data" in str(c).lower()), None)
     col_tipo = next((c for c in df.columns if "tipo" in str(c).lower()), None)
     col_marcacion = None
     for c in df.columns:
@@ -77,8 +76,7 @@ def importar_marcas_de_planilha(arquivo_excel, progress_callback=None):
     erros_colunas = []
     if not col_apellidos: erros_colunas.append("Apellidos (RE)")
     if not col_rut: erros_colunas.append("Rut (CPF)")
-    if not col_data: erros_colunas.append("Data/Fecha")
-    if not col_hora: erros_colunas.append("Hora")
+    if not col_fecha: erros_colunas.append("Fecha/Data")
     if not col_tipo: erros_colunas.append("Tipo")
     if not col_marcacion: erros_colunas.append("Marcación")
 
@@ -138,43 +136,46 @@ def importar_marcas_de_planilha(arquivo_excel, progress_callback=None):
         marcacion_norm = normalizar_nome(marcacion_str)
         loja = loja_map.get(marcacion_norm)
 
-        # Trata data e hora
-        val_data = row[col_data]
-        val_hora = row[col_hora]
+        # Trata data e hora a partir da coluna Fecha/Data
+        val_fecha = row[col_fecha]
 
-        if pd.isna(val_data) or pd.isna(val_hora):
+        if pd.isna(val_fecha):
             erros += 1
             continue
 
-        # Converte Data
-        if isinstance(val_data, datetime):
-            batida_data = val_data.date()
-        elif isinstance(val_data, date):
-            batida_data = val_data
+        batida_data = None
+        batida_time = None
+
+        if isinstance(val_fecha, datetime):
+            batida_data = val_fecha.date()
+            batida_time = val_fecha.time()
+        elif isinstance(val_fecha, date):
+            batida_data = val_fecha
         else:
-            try:
-                batida_data = datetime.strptime(str(val_data).split()[0], "%Y-%m-%d").date()
-            except Exception:
+            val_fecha_str = str(val_fecha).strip()
+            # Tenta formatos com data e hora combinadas
+            formatos_dt = [
+                "%d-%m-%Y %H:%M:%S",
+                "%d-%m-%Y %H:%M",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d %H:%M",
+                "%d/%m/%Y %H:%M:%S",
+                "%d/%m/%Y %H:%M",
+                "%Y/%m/%d %H:%M:%S",
+                "%Y/%m/%d %H:%M",
+            ]
+            for fmt in formatos_dt:
                 try:
-                    batida_data = datetime.strptime(str(val_data).split()[0], "%d/%m/%Y").date()
-                except Exception:
-                    erros += 1
+                    dt_parsed = datetime.strptime(val_fecha_str, fmt)
+                    batida_data = dt_parsed.date()
+                    batida_time = dt_parsed.time()
+                    break
+                except ValueError:
                     continue
 
-        # Converte Hora
-        if isinstance(val_hora, time):
-            batida_time = val_hora
-        elif isinstance(val_hora, datetime):
-            batida_time = val_hora.time()
-        else:
-            try:
-                batida_time = datetime.strptime(str(val_hora).strip(), "%H:%M:%S").time()
-            except Exception:
-                try:
-                    batida_time = datetime.strptime(str(val_hora).strip(), "%H:%M").time()
-                except Exception:
-                    erros += 1
-                    continue
+        if not batida_data or not batida_time:
+            erros += 1
+            continue
 
         # Constrói o timezone-aware datetime local
         dt_naive = datetime.combine(batida_data, batida_time)

@@ -91,7 +91,7 @@ def headcount_analise_api(request):
             pass
 
         real = loja.headcount_real
-        desvio = quadro_planejado - real
+        desvio = real - quadro_planejado
 
         presencas_ontem = presencas_ontem_map.get(str(loja.id), 0)
         aderencia = 0.0

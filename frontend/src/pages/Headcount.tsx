@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { 
-  Users, 
-  Search, 
-  AlertCircle, 
+import {
+  Users,
+  Search,
+  AlertCircle,
   HelpCircle,
-  Layers, 
+  Layers,
   Briefcase,
   CheckCircle2,
   TrendingUp,
@@ -28,7 +28,6 @@ interface HeadcountRow {
   headcount_real: number;
   desvio: number;
   presencas_ultimo_dia: number;
-  aderencia: number;
   geovictoria_sincronizado_em: string | null;
 }
 
@@ -54,7 +53,7 @@ export default function Headcount() {
   const [busca, setBusca] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [ordenacao, setOrdenacao] = useState<'default' | 'presencas_desc' | 'presencas_asc' | 'desvio_desc' | 'desvio_asc' | 'aderencia_desc' | 'aderencia_asc'>('default');
+  const [ordenacao, setOrdenacao] = useState<'default' | 'presencas_desc' | 'presencas_asc' | 'desvio_desc' | 'desvio_asc'>('default');
 
   // Estados do Modal de Calendário de Presenças GeoVictoria
   interface ColaboradorPresenca {
@@ -66,10 +65,7 @@ export default function Headcount() {
     horario_entrada: string;
   }
   const [selectedLoja, setSelectedLoja] = useState<{ id: string; nome: string } | null>(null);
-  const [anoMes, setAnoMes] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [anoMes, setAnoMes] = useState('2026-05'); // Inicializa no mês de início sugerido (Maio de 2026)
   const [calendarioDados, setCalendarioDados] = useState<{ [dataStr: string]: number }>({});
   const [loadingCalendario, setLoadingCalendario] = useState(false);
   const [errorCalendario, setErrorCalendario] = useState<string | null>(null);
@@ -133,7 +129,7 @@ export default function Headcount() {
   const handleSyncGeral = async () => {
     setSyncingRecente(true);
     const toastId = toast.loading('Sincronizando batidas de ontem para todas as lojas...');
-    
+
     // Inicia o polling do progresso
     const interval = setInterval(async () => {
       try {
@@ -165,7 +161,7 @@ export default function Headcount() {
   const handleSyncLoja = async (lojaId: string) => {
     setSyncingLojas(prev => ({ ...prev, [lojaId]: true }));
     const toastId = toast.loading('Sincronizando batidas dos últimos 3 dias para esta loja...');
-    
+
     const interval = setInterval(async () => {
       try {
         const res = await api.get('/lojas/api/presencas/sincronizar-progresso/');
@@ -238,8 +234,8 @@ export default function Headcount() {
     setErrorMsg(null);
     try {
       const response = await api.get('/lojas/headcount/', {
-        params: { 
-          page: currentPage, 
+        params: {
+          page: currentPage,
           busca: busca,
           ordenacao: ordenacao === 'default' ? '' : ordenacao
         }
@@ -248,7 +244,7 @@ export default function Headcount() {
         const payload = response.data.results || {};
         setData(payload.resultados || []);
         setKpis(payload.kpis || { total_planejado: 0, total_real: 0, total_excedentes: 0, total_lojas: 0 });
-        
+
         const totalCount = response.data.count || 0;
         setTotalPages(Math.ceil(totalCount / 20) || 1);
       } else {
@@ -270,7 +266,7 @@ export default function Headcount() {
 
   const handleToggleOrdenacao = () => {
     setOrdenacao(prev => {
-      if (prev === 'default' || !prev.startsWith('presencas')) return 'presencas_desc';
+      if (prev === 'default' || prev.startsWith('desvio')) return 'presencas_desc';
       if (prev === 'presencas_desc') return 'presencas_asc';
       return 'default';
     });
@@ -279,26 +275,11 @@ export default function Headcount() {
 
   const handleToggleOrdenacaoDesvio = () => {
     setOrdenacao(prev => {
-      if (prev === 'default' || !prev.startsWith('desvio')) return 'desvio_desc';
+      if (prev === 'default' || prev.startsWith('presencas')) return 'desvio_desc';
       if (prev === 'desvio_desc') return 'desvio_asc';
       return 'default';
     });
     setCurrentPage(1);
-  };
-
-  const handleToggleOrdenacaoAderencia = () => {
-    setOrdenacao(prev => {
-      if (prev === 'default' || !prev.startsWith('aderencia')) return 'aderencia_desc';
-      if (prev === 'aderencia_desc') return 'aderencia_asc';
-      return 'default';
-    });
-    setCurrentPage(1);
-  };
-
-  const handleOpenLoja = (loja: { id: string; nome: string }) => {
-    const d = new Date();
-    setAnoMes(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-    setSelectedLoja(loja);
   };
 
 
@@ -365,23 +346,10 @@ export default function Headcount() {
           </div>
         </div>
 
-        {/* Quadro Planejado */}
+        {/* Ativos TOTVS */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Ativos Totvs Total</span>
-            <span className="text-2xl font-extrabold font-mono text-neutral-950 dark:text-neutral-50 block">
-              {loading ? '...' : kpis.total_planejado}
-            </span>
-          </div>
-          <div className="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
-            <Briefcase className="h-5 w-5" />
-          </div>
-        </div>
-
-        {/* Headcount Real */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Quadro Gestão Total</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Ativos TOTVS Total</span>
             <span className="text-2xl font-extrabold font-mono text-neutral-950 dark:text-neutral-50 block">
               {loading ? '...' : kpis.total_real}
             </span>
@@ -391,12 +359,24 @@ export default function Headcount() {
           </div>
         </div>
 
+        {/* Quadro Gestão */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Quadro Gestão Total</span>
+            <span className="text-2xl font-extrabold font-mono text-neutral-950 dark:text-neutral-50 block">
+              {loading ? '...' : kpis.total_planejado}
+            </span>
+          </div>
+          <div className="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+            <Briefcase className="h-5 w-5" />
+          </div>
+        </div>
+
         {/* Total Excedentes */}
-        <div className={`border rounded-2xl p-5 shadow-sm flex items-center justify-between transition-colors ${
-          kpis.total_excedentes > 0 
-            ? 'bg-violet-500/5 border-violet-500/20 text-violet-750' 
+        <div className={`border rounded-2xl p-5 shadow-sm flex items-center justify-between transition-colors ${kpis.total_excedentes > 0
+            ? 'bg-violet-500/5 border-violet-500/20 text-violet-750'
             : 'bg-green-500/5 border-green-500/20 text-green-700'
-        }`}>
+          }`}>
           <div className="space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">Total de Excedentes</span>
             <span className="text-2xl font-extrabold font-mono block">
@@ -413,9 +393,9 @@ export default function Headcount() {
         </div>
       </div>
 
-      {/* Regra de Negócio Informação */}
-      <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-850 bg-neutral-50 dark:bg-neutral-900/50 flex gap-3 items-start text-xs text-neutral-500 leading-relaxed">
-        <HelpCircle className="h-4.5 w-4.5 text-neutral-400 shrink-0 mt-0.5" />
+      {/* Critérios de Elegibilidade */}
+      <div className="bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-4 rounded-xl flex gap-3 text-xs text-neutral-500">
+        <HelpCircle className="h-5 w-5 text-neutral-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-bold text-neutral-800 dark:text-neutral-300 block mb-0.5">Critérios de Elegibilidade:</span>
           <span>Considera colaboradores com os status <strong>ATIVO</strong> e <strong>AVISO</strong>. No caso específico de lojas do grupo <strong>ATACADÃO</strong>, o status <strong>FÉRIAS</strong> também soma no real. Os limites planejados vêm diretamente do campo Quadro cadastrado na Loja física.</span>
@@ -431,9 +411,9 @@ export default function Headcount() {
                 <th className="py-4 px-6">Loja</th>
                 <th className="py-4 px-4">Cliente</th>
                 <th className="py-4 px-4">Centro de Custo</th>
-                <th className="py-4 px-4 text-center">Ativos Totvs</th>
+                <th className="py-4 px-4 text-center">Ativos TOTVS</th>
                 <th className="py-4 px-4 text-center">Quadro Gestão</th>
-                <th 
+                <th
                   onClick={handleToggleOrdenacaoDesvio}
                   className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
                   title="Clique para ordenar por desvio"
@@ -449,7 +429,7 @@ export default function Headcount() {
                     )}
                   </div>
                 </th>
-                <th 
+                <th
                   onClick={handleToggleOrdenacao}
                   className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
                   title="Clique para ordenar por presenças de ontem"
@@ -459,22 +439,6 @@ export default function Headcount() {
                     {ordenacao === 'presencas_desc' ? (
                       <span className="text-primary font-bold">↓</span>
                     ) : ordenacao === 'presencas_asc' ? (
-                      <span className="text-primary font-bold">↑</span>
-                    ) : (
-                      <span className="text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400">⇅</span>
-                    )}
-                  </div>
-                </th>
-                <th 
-                  onClick={handleToggleOrdenacaoAderencia}
-                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-855 transition-colors group"
-                  title="Clique para ordenar por presença em relação ao quadro"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Presença/Quadro (%)</span>
-                    {ordenacao === 'aderencia_desc' ? (
-                      <span className="text-primary font-bold">↓</span>
-                    ) : ordenacao === 'aderencia_asc' ? (
                       <span className="text-primary font-bold">↑</span>
                     ) : (
                       <span className="text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400">⇅</span>
@@ -495,13 +459,12 @@ export default function Headcount() {
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
-                    <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-6"><div className="h-6 bg-neutral-100 dark:bg-neutral-800 rounded w-24 mx-auto" /></td>
                   </tr>
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-neutral-400 italic">
+                  <td colSpan={8} className="py-12 text-center text-neutral-400 italic">
                     Nenhuma loja ativa encontrada para os filtros aplicados.
                   </td>
                 </tr>
@@ -511,7 +474,7 @@ export default function Headcount() {
                     <td className="py-4 px-6 font-bold text-neutral-850 dark:text-neutral-200">
                       <div className="flex flex-col gap-0.5">
                         <button
-                          onClick={() => handleOpenLoja({ id: row.loja_id, nome: row.nome_referencia })}
+                          onClick={() => setSelectedLoja({ id: row.loja_id, nome: row.nome_referencia })}
                           className="text-left font-bold text-primary hover:underline hover:text-primary-active focus:outline-none transition-colors"
                           title="Clique para ver o calendário de presenças reais"
                         >
@@ -526,24 +489,20 @@ export default function Headcount() {
                     </td>
                     <td className="py-4 px-4 text-neutral-600 dark:text-neutral-400 font-medium">{row.cliente}</td>
                     <td className="py-4 px-4 text-neutral-500 font-mono">{row.centro_de_custo}</td>
-                    <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">{row.quadro_planejado}</td>
                     <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">{row.headcount_real}</td>
+                    <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">{row.quadro_planejado}</td>
                     <td className="py-4 px-4 text-center">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        row.desvio > 0 
-                          ? 'bg-violet-500/10 text-violet-750 border border-violet-500/20' 
-                          : row.desvio < 0 
-                          ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20' 
-                          : 'bg-green-550/10 text-green-700 border border-green-500/20'
-                      }`}>
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold ${row.desvio > 0
+                          ? 'bg-violet-500/10 text-violet-750 border border-violet-500/20'
+                          : row.desvio < 0
+                            ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
+                            : 'bg-green-550/10 text-green-700 border border-green-500/20'
+                        }`}>
                         {row.desvio > 0 ? `+${row.desvio}` : row.desvio}
                       </span>
                     </td>
                     <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">
                       {row.presencas_ultimo_dia}
-                    </td>
-                    <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">
-                      {row.quadro_planejado > 0 ? `${row.aderencia}%` : '-'}
                     </td>
                     <td className="py-4 px-6 text-center">
                       <button
@@ -591,7 +550,7 @@ export default function Headcount() {
       {selectedLoja && (
         <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto transition-opacity duration-200">
           <div ref={modalRef} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl flex flex-col gap-6 relative max-h-[90vh]">
-            
+
             {/* Cabeçalho do Modal */}
             <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-4">
               <div className="flex items-center gap-3">
@@ -605,7 +564,7 @@ export default function Headcount() {
                   </p>
                 </div>
               </div>
-              
+
               <button
                 onClick={() => setSelectedLoja(null)}
                 className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
@@ -642,7 +601,7 @@ export default function Headcount() {
 
             {/* Corpo do Modal em Duas Colunas */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto pr-1">
-              
+
               {/* Calendário (Col 1 a 7) */}
               <div className="lg:col-span-7 flex flex-col gap-4 border border-neutral-200 dark:border-neutral-800 p-4 rounded-xl">
                 <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block border-b border-neutral-100 dark:border-neutral-850 pb-1.5">
@@ -687,17 +646,15 @@ export default function Headcount() {
                           <button
                             key={item.dataStr}
                             onClick={() => setSelectedDia(item.dataStr)}
-                            className={`aspect-square p-1.5 flex flex-col justify-between border rounded-xl hover:border-primary transition-all text-left relative ${
-                              isSelected 
-                                ? 'bg-primary/10 border-primary ring-2 ring-primary/20' 
+                            className={`aspect-square p-1.5 flex flex-col justify-between border rounded-xl hover:border-primary transition-all text-left relative ${isSelected
+                                ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
                                 : temPresencas
-                                ? 'bg-green-500/5 dark:bg-green-500/10 border-green-500/20 hover:bg-green-500/10'
-                                : 'bg-neutral-50/50 dark:bg-neutral-950/30 border-neutral-150 dark:border-neutral-850 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                            }`}
+                                  ? 'bg-green-500/5 dark:bg-green-500/10 border-green-500/20 hover:bg-green-500/10'
+                                  : 'bg-neutral-50/50 dark:bg-neutral-950/30 border-neutral-150 dark:border-neutral-850 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                              }`}
                           >
-                            <span className={`text-xs font-bold ${
-                              isSelected ? 'text-primary' : 'text-neutral-700 dark:text-neutral-300'
-                            }`}>
+                            <span className={`text-xs font-bold ${isSelected ? 'text-primary' : 'text-neutral-700 dark:text-neutral-300'
+                              }`}>
                               {item.dia}
                             </span>
                             {temPresencas && (
