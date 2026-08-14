@@ -21,11 +21,10 @@ ALLOWED_HOSTS = DEFAULT_ALLOWED_HOSTS + config(
     cast=Csv(),
 )
 
-CSRF_TRUSTED_ORIGINS = config(
-    "*",
-    default="",
-    cast=Csv(),
-)
+# Configuração de Limites de Upload (Evita erro 400 Bad Request em arquivos grandes)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
 
 
 INSTALLED_APPS = [
@@ -107,8 +106,27 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": db_name,
+            "OPTIONS": {
+                "timeout": 30,  # Aumenta timeout de bloqueio de 5s para 30s
+            },
         }
     }
+
+# Otimizações de Concorrência Máxima no SQLite (Modo WAL)
+# Garante que leituras simultâneas NUNCA sejam bloqueadas durante importações ou escritas pesadas.
+from django.db.backends.signals import connection_created
+from django.dispatch import receiver
+
+@receiver(connection_created)
+def configure_sqlite_concurrency(sender, connection, **kwargs):
+    if connection.vendor == "sqlite":
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA journal_mode = WAL;")        # Leitores não travam escritores e vice-versa
+            cursor.execute("PRAGMA synchronous = NORMAL;")       # Sincronização rápida sem travamentos de disco
+            cursor.execute("PRAGMA busy_timeout = 30000;")       # Espera até 30s em concorrência sem dar erro de lock
+            cursor.execute("PRAGMA temp_store = MEMORY;")        # Tabelas temporárias em RAM
+            cursor.execute("PRAGMA mmap_size = 268435456;")      # 256MB memory map para leituras ultrarrápidas
+            cursor.execute("PRAGMA cache_size = -64000;")        # 64MB de cache em memória
 
 
 AUTH_PASSWORD_VALIDATORS = [
