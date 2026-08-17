@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { Search, Loader2, X } from 'lucide-react';
+import { Search, Loader2, X, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import api from '../../api/client';
 import { normalizeString } from '../../lib/utils';
 import type { Colaborador } from '../Colaboradores/ColaboradoresTable';
@@ -9,6 +9,8 @@ interface CleanerSidebarProps {
   selectedColaboradorId: string | null;
   onSelectColaborador: (id: string) => void;
   onAddColaborador: (colaborador: Colaborador) => void;
+  onMoveColaborador?: (id: string, direction: 'up' | 'down') => void;
+  onReorderColaboradores?: (colaboradores: Colaborador[]) => void;
 }
 
 const AVATAR_TONES = [
@@ -32,20 +34,24 @@ const getInitials = (name?: string) => {
  * Barra lateral com a listagem e busca por Nome ou RE dos colaboradores.
  * 
  * Por que existe: Permite que o usuário filtre rapidamente e selecione 
- * os colaboradores que possuem escalas, além de pesquisar dinamicamente no banco
- * novos nomes sob demanda para adicionar à escala.
+ * os colaboradores que possuem escalas, reordene-os na grade (subir/descer/arrastar)
+ * e pesquise dinamicamente no banco novos nomes sob demanda para adicionar à escala.
  */
 export const CleanerSidebar = memo(({ 
   visibleColaboradores, 
   selectedColaboradorId, 
   onSelectColaborador,
-  onAddColaborador
+  onAddColaborador,
+  onMoveColaborador,
+  onReorderColaboradores
 }: CleanerSidebarProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [directSearchQuery, setDirectSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Colaborador[]>([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [draggedColabId, setDraggedColabId] = useState<string | null>(null);
+  const [dragOverColabId, setDragOverColabId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Fecha o painel flutuante se o usuário clicar fora do componente de busca
@@ -94,11 +100,47 @@ export const CleanerSidebar = memo(({
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedColabId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColabId !== id) {
+      setDragOverColabId(id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = draggedColabId || e.dataTransfer.getData('text/plain');
+    if (sourceId && sourceId !== targetId && onReorderColaboradores) {
+      const sourceIndex = visibleColaboradores.findIndex(c => String(c.id) === String(sourceId));
+      const targetIndex = visibleColaboradores.findIndex(c => String(c.id) === String(targetId));
+      if (sourceIndex !== -1 && targetIndex !== -1) {
+        const newList = [...visibleColaboradores];
+        const [moved] = newList.splice(sourceIndex, 1);
+        newList.splice(targetIndex, 0, moved);
+        onReorderColaboradores(newList);
+      }
+    }
+    setDraggedColabId(null);
+    setDragOverColabId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedColabId(null);
+    setDragOverColabId(null);
+  };
+
   return (
     <div className="w-full shrink-0 lg:w-72 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs shadow-sm space-y-5">
       <div>
         <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 text-left">Equipe de Apoio</h3>
-        <p className="text-xs text-neutral-500 mt-1 text-left">Selecione ou adicione um colaborador.</p>
+        <p className="text-xs text-neutral-500 mt-1 text-left">Selecione, adicione ou reordene um colaborador.</p>
       </div>
 
       {/* Busca direta de novos colaboradores via API */}
@@ -186,27 +228,90 @@ export const CleanerSidebar = memo(({
       <div className="flex flex-col gap-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
         {filteredColaboradores.map((colab, index) => {
           const isSelected = colab.id === selectedColaboradorId;
+          const isBeingDragged = draggedColabId === String(colab.id);
+          const isDragTarget = dragOverColabId === String(colab.id) && !isBeingDragged;
+
           return (
-            <button
+            <div
               key={colab.id} 
-              type="button" 
-              onClick={() => onSelectColaborador(colab.id)}
-              className={`group flex items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 cursor-pointer ${
+              draggable={!searchTerm.trim()}
+              onDragStart={(e) => handleDragStart(e, String(colab.id))}
+              onDragOver={(e) => handleDragOver(e, String(colab.id))}
+              onDrop={(e) => handleDrop(e, String(colab.id))}
+              onDragEnd={handleDragEnd}
+              className={`group flex items-center justify-between gap-2 rounded-xl border p-2.5 transition-all duration-150 select-none ${
+                isBeingDragged ? 'opacity-30 border-dashed border-primary bg-primary/5' : ''
+              } ${
+                isDragTarget ? 'ring-2 ring-primary border-primary scale-[1.01] bg-primary/10' : ''
+              } ${
                 isSelected 
                 ? 'border-neutral-900 bg-neutral-900 text-white shadow-md dark:border-white dark:bg-white dark:text-neutral-900' 
                 : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-850'
               }`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${getAvatarTone(index)} text-xs font-bold text-white shadow-xs`}>
-                {getInitials(colab.nome)}
+              {/* Área Clicável Principal */}
+              <button
+                type="button"
+                onClick={() => onSelectColaborador(colab.id)}
+                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer focus:outline-none"
+              >
+                <div 
+                  className={`cursor-grab active:cursor-grabbing p-0.5 rounded text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-400 dark:group-hover:text-neutral-300 transition-colors ${
+                    isSelected ? 'text-neutral-400 dark:text-neutral-500' : ''
+                  }`}
+                  title="Arraste para mover para cima ou para baixo"
+                >
+                  <GripVertical className="h-4 w-4 shrink-0" />
+                </div>
+
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${getAvatarTone(index)} text-xs font-bold text-white shadow-xs`}>
+                  {getInitials(colab.nome)}
+                </div>
+
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="truncate text-xs font-bold leading-tight">{colab.nome}</span>
+                  <span className={`truncate text-[10px] font-mono mt-0.5 ${isSelected ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400'}`}>
+                    RE: {colab.re} | {colab.cargo}
+                  </span>
+                </div>
+              </button>
+
+              {/* Botões Mover para Cima / Mover para Baixo */}
+              <div className="flex flex-col gap-0.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveColaborador?.(String(colab.id), 'up');
+                  }}
+                  disabled={index === 0}
+                  title="Mover para cima"
+                  className={`p-1 rounded-md transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed ${
+                    isSelected
+                      ? 'hover:bg-neutral-800 dark:hover:bg-neutral-200 text-neutral-300 dark:text-neutral-700'
+                      : 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-100'
+                  }`}
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveColaborador?.(String(colab.id), 'down');
+                  }}
+                  disabled={index === filteredColaboradores.length - 1}
+                  title="Mover para baixo"
+                  className={`p-1 rounded-md transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed ${
+                    isSelected
+                      ? 'hover:bg-neutral-800 dark:hover:bg-neutral-200 text-neutral-300 dark:text-neutral-700'
+                      : 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-100'
+                  }`}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="truncate text-sm font-bold leading-tight">{colab.nome}</span>
-                <span className={`truncate text-[10px] font-mono mt-0.5 ${isSelected ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400'}`}>
-                  RE: {colab.re} | {colab.cargo}
-                </span>
-              </div>
-            </button>
+            </div>
           );
         })}
         {filteredColaboradores.length === 0 && (
@@ -220,3 +325,4 @@ export const CleanerSidebar = memo(({
 });
 
 CleanerSidebar.displayName = 'CleanerSidebar';
+

@@ -64,8 +64,15 @@ export default function Headcount() {
     cargo: string;
     horario_entrada: string;
   }
+  const getMesAtual = () => {
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = String(agora.getMonth() + 1).padStart(2, '0');
+    return `${ano}-${mes}`;
+  };
+
   const [selectedLoja, setSelectedLoja] = useState<{ id: string; nome: string } | null>(null);
-  const [anoMes, setAnoMes] = useState('2026-05'); // Inicializa no mês de início sugerido (Maio de 2026)
+  const [anoMes, setAnoMes] = useState(getMesAtual()); // Inicializa dinamicamente no mês atual
   const [calendarioDados, setCalendarioDados] = useState<{ [dataStr: string]: number }>({});
   const [loadingCalendario, setLoadingCalendario] = useState(false);
   const [errorCalendario, setErrorCalendario] = useState<string | null>(null);
@@ -76,6 +83,11 @@ export default function Headcount() {
   const [syncingLojas, setSyncingLojas] = useState<Record<string, boolean>>({});
   const modalRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(modalRef, () => setSelectedLoja(null));
+
+  const handleOpenLoja = (loja: { id: string; nome: string }) => {
+    setAnoMes(getMesAtual());
+    setSelectedLoja(loja);
+  };
 
   const formatarDataSincronizacao = (isoString: string | null) => {
     if (!isoString) return 'Nunca sincronizado';
@@ -474,7 +486,7 @@ export default function Headcount() {
                     <td className="py-4 px-6 font-bold text-neutral-850 dark:text-neutral-200">
                       <div className="flex flex-col gap-0.5">
                         <button
-                          onClick={() => setSelectedLoja({ id: row.loja_id, nome: row.nome_referencia })}
+                          onClick={() => handleOpenLoja({ id: row.loja_id, nome: row.nome_referencia })}
                           className="text-left font-bold text-primary hover:underline hover:text-primary-active focus:outline-none transition-colors"
                           title="Clique para ver o calendário de presenças reais"
                         >

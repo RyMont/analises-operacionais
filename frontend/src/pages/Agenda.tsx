@@ -14,6 +14,38 @@ import { CalendarDay } from '../components/Agenda/CalendarDay';
 import { CalendarNavigation } from '../components/Agenda/CalendarNavigation';
 import { AgendaActionModal } from '../components/Agenda/AgendaActionModal';
 
+const LOCAL_STORAGE_KEY_ORDER = 'agenda_colaboradores_ordem';
+
+const getSavedOrder = (): string[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY_ORDER);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveOrder = (colaboradores: Colaborador[]) => {
+  try {
+    const ids = colaboradores.map(c => String(c.id));
+    localStorage.setItem(LOCAL_STORAGE_KEY_ORDER, JSON.stringify(ids));
+  } catch (e) {
+    console.error('Erro ao salvar ordem dos colaboradores:', e);
+  }
+};
+
+const sortWithSavedOrder = (colabs: Colaborador[], savedOrder: string[]): Colaborador[] => {
+  if (!savedOrder || savedOrder.length === 0) return colabs;
+  const orderMap = new Map<string, number>();
+  savedOrder.forEach((id, idx) => orderMap.set(String(id), idx));
+
+  return [...colabs].sort((a, b) => {
+    const posA = orderMap.has(String(a.id)) ? orderMap.get(String(a.id))! : 9999;
+    const posB = orderMap.has(String(b.id)) ? orderMap.get(String(b.id))! : 9999;
+    return posA - posB;
+  });
+};
+
 /**
  * Página principal de Planejamento e Programação da Agenda de Apoio.
  * 
@@ -145,10 +177,14 @@ export default function Agenda() {
 
       setVisibleCollaborators(prev => {
         const map = new Map<string, Colaborador>();
-        // Insere os que já possuem escala
-        uniqueColabsMap.forEach((c, id) => map.set(id, c));
         // Preserva os que já estavam listados na tela
         prev.forEach(c => map.set(String(c.id), c));
+        // Insere os que já possuem escala
+        uniqueColabsMap.forEach((c, id) => {
+          if (!map.has(id)) {
+            map.set(id, c);
+          }
+        });
 
         // Se houver um selecionado, garante sua presença na barra lateral
         if (selectedColaboradorId && !map.has(selectedColaboradorId)) {
@@ -156,7 +192,9 @@ export default function Agenda() {
           if (selColab) map.set(selectedColaboradorId, selColab);
         }
 
-        return Array.from(map.values());
+        const list = Array.from(map.values());
+        const savedOrder = getSavedOrder();
+        return sortWithSavedOrder(list, savedOrder);
       });
     } catch (err) {
       console.error('Erro ao buscar agendamentos do mês:', err);
@@ -363,6 +401,29 @@ export default function Agenda() {
     }
   }, [selectedColaboradorId, agendamentos]);
 
+  // Move o colaborador para cima ou para baixo na lista/grid
+  const handleMoveColaborador = useCallback((id: string, direction: 'up' | 'down') => {
+    setVisibleCollaborators(prev => {
+      const index = prev.findIndex(c => String(c.id) === String(id));
+      if (index === -1) return prev;
+      
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
+      const newList = [...prev];
+      const [moved] = newList.splice(index, 1);
+      newList.splice(targetIndex, 0, moved);
+      saveOrder(newList);
+      return newList;
+    });
+  }, []);
+
+  // Atualiza a ordenação completa dos colaboradores (ex: via Drag and Drop)
+  const handleReorderColaboradores = useCallback((newOrder: Colaborador[]) => {
+    setVisibleCollaborators(newOrder);
+    saveOrder(newOrder);
+  }, []);
+
 
 
   return (
@@ -384,11 +445,15 @@ export default function Agenda() {
           onAddColaborador={(colab) => {
             setVisibleCollaborators((prev) => {
               if (prev.some(c => String(c.id) === String(colab.id))) return prev;
-              return [...prev, colab];
+              const updated = [...prev, colab];
+              saveOrder(updated);
+              return updated;
             });
             setSelectedColaboradorId(String(colab.id));
             closeDayModal();
           }}
+          onMoveColaborador={handleMoveColaborador}
+          onReorderColaboradores={handleReorderColaboradores}
         />
 
         {/* Área de Calendário */}
