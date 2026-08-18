@@ -137,7 +137,7 @@ export const CleanerSidebar = memo(({
   };
 
   return (
-    <div className="w-full shrink-0 lg:w-72 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs shadow-sm space-y-5">
+    <div className="w-full shrink-0 lg:w-[340px] xl:w-[380px] bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs shadow-sm space-y-5">
       <div>
         <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 text-left">Equipe de Apoio</h3>
         <p className="text-xs text-neutral-500 mt-1 text-left">Selecione, adicione ou reordene um colaborador.</p>

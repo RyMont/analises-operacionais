@@ -1,5 +1,19 @@
-import { useEffect, useState, useRef } from 'react';
-import { AlertCircle, UserX, TrendingDown, Search, ArrowLeft, ArrowRight, UserCheck, Percent } from 'lucide-react';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import { 
+  AlertCircle, 
+  UserX, 
+  TrendingDown, 
+  Search, 
+  ArrowLeft, 
+  ArrowRight, 
+  UserCheck, 
+  Percent, 
+  Store, 
+  RotateCcw, 
+  ArrowUpDown, 
+  Filter, 
+  Activity 
+} from 'lucide-react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -12,7 +26,8 @@ import {
   Cell,
   BarChart,
   Bar,
-  CartesianGrid
+  CartesianGrid,
+  ReferenceLine
 } from 'recharts';
 import api from '../api/client';
 import SearchableSelect from '../components/ui/searchable-select';
@@ -29,6 +44,19 @@ interface ColaboradorDemitido {
   centro_custo: string;
   loja_gestao_coordenador: string;
   loja_gestao_supervisor: string;
+}
+
+interface LojaTurnoverData {
+  id?: string | number;
+  loja: string;
+  coordenador?: string;
+  supervisor?: string;
+  uf?: string;
+  quantidade: number;
+  taxa_turnover?: number;
+  quadro: number;
+  demissoes: number;
+  admissoes?: number;
 }
 
 interface FiltroOpcoes {
@@ -66,12 +94,77 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+const LojaCustomTooltip = ({ active, payload, metrica }: { active?: boolean; payload?: any[]; metrica?: 'taxa' | 'demissoes' }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const taxa = data.taxa_turnover ?? data.quantidade ?? 0;
+    return (
+      <div className="bg-neutral-900/95 text-white p-3.5 rounded-xl border border-neutral-800 text-xs shadow-xl space-y-2 backdrop-blur-md min-w-[210px]">
+        <div className="border-b border-neutral-800 pb-1.5">
+          <p className="font-black text-sm text-neutral-100">{data.loja}</p>
+          <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
+            {data.uf && data.uf !== 'N/A' && (
+              <span className="bg-neutral-800 px-1.5 py-0.5 rounded-xs font-semibold text-neutral-300">UF: {data.uf}</span>
+            )}
+            {data.coordenador && <span className="truncate max-w-[140px] text-neutral-350">{data.coordenador}</span>}
+          </div>
+        </div>
+
+        <div className="space-y-1.5 text-[11px]">
+          <div className={`flex items-center justify-between ${metrica === 'taxa' ? 'bg-violet-950/40 px-1.5 py-0.5 rounded-sm border border-violet-800/30' : ''}`}>
+            <span className="text-neutral-400">Taxa de Turnover:</span>
+            <span className={`font-black text-xs ${taxa >= 20 ? 'text-rose-400' : taxa >= 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {taxa.toFixed(1)}%
+            </span>
+          </div>
+          <div className={`flex items-center justify-between ${metrica === 'demissoes' ? 'bg-rose-950/40 px-1.5 py-0.5 rounded-sm border border-rose-800/30' : ''}`}>
+            <span className="text-neutral-400">Demissões:</span>
+            <span className="font-bold text-neutral-100">{data.demissoes}</span>
+          </div>
+          {data.admissoes !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-400">Admissões:</span>
+              <span className="font-bold text-neutral-100">{data.admissoes}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-neutral-400">Quadro Planejado:</span>
+            <span className="font-bold text-neutral-200">{data.quadro}</span>
+          </div>
+          {data.supervisor && data.supervisor !== 'Sem Supervisor' && (
+            <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1 border-t border-neutral-800/60">
+              <span>Supervisor:</span>
+              <span className="text-neutral-300 font-medium truncate max-w-[130px]">{data.supervisor}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const getBarColor = (entry: LojaTurnoverData, metrica: 'taxa' | 'demissoes') => {
+  if (metrica === 'demissoes') {
+    if (entry.demissoes >= 5) return '#f43f5e';
+    if (entry.demissoes >= 2) return '#f59e0b';
+    if (entry.demissoes > 0) return '#6366f1';
+    return '#10b981';
+  }
+  const taxa = entry.taxa_turnover ?? entry.quantidade ?? 0;
+  if (taxa >= 25) return '#f43f5e'; // Vermelho / Rose para crítico
+  if (taxa >= 15) return '#f59e0b'; // Âmbar para moderado alto
+  if (taxa >= 5) return '#6366f1';  // Índigo para moderado
+  if (taxa > 0) return '#8b5cf6';  // Violeta para baixo
+  return '#10b981';                 // Esmeralda para zero demissões
+};
+
 /**
  * Tela de Análise de Turnover.
  * 
  * Por que existe: Oferece um painel completo para visualização, análise e filtro
  * dos índices de turnover (desligamentos) da equipe, detalhando motivos de demissão,
- * evolução mensal, distribuição geográfica, ranking de lojas e tabela paginada.
+ * evolução mensal, distribuição geográfica, gráfico vertical de todas as lojas e tabela paginada.
  */
 export default function Turnover() {
 
@@ -85,11 +178,11 @@ export default function Turnover() {
     motivo: [] as { motivo: string; quantidade: number }[],
     mensal: [] as { mes: string; admissoes: number; demissoes: number }[],
     coordenador: [] as { coordenador: string; quantidade: number }[],
-    lojas: [] as { loja: string; quantidade: number }[],
+    lojas: [] as LojaTurnoverData[],
     cargos: [] as { cargo: string; quantidade: number }[]
   });
 
-  // Estados dos filtros
+  // Estados dos filtros globais do painel
   const [filtroLoja, setFiltroLoja] = useState('');
   const [filtroCoordenador, setFiltroCoordenador] = useState('');
   const [filtroSupervisor, setFiltroSupervisor] = useState('');
@@ -98,7 +191,7 @@ export default function Turnover() {
   const [filtroCompetencia, setFiltroCompetencia] = useState('');
   const [buscaText, setBuscaText] = useState('');
   
-  // Opções carregadas dos filtros
+  // Opções carregadas dos filtros globais
   const [filtroOpcoes, setFiltroOpcoes] = useState<FiltroOpcoes>({
     lojas: [],
     coordenadores: [],
@@ -107,6 +200,15 @@ export default function Turnover() {
     motivos: [],
     competencias: []
   });
+
+  // Estados de Filtros Exclusivos da Área do Gráfico de Lojas
+  const [lojaBuscaArea, setLojaBuscaArea] = useState('');
+  const [lojaCoordArea, setLojaCoordArea] = useState('');
+  const [lojaSuperArea, setLojaSuperArea] = useState('');
+  const [lojaUfArea, setLojaUfArea] = useState('');
+  const [lojaStatusArea, setLojaStatusArea] = useState<'todas' | 'com_turnover' | 'top10' | 'top20' | 'top50' | 'critico' | 'sem_turnover'>('todas');
+  const [lojaOrdenacaoArea, setLojaOrdenacaoArea] = useState<'turnover_desc' | 'turnover_asc' | 'demissoes_desc' | 'nome_asc' | 'nome_desc'>('turnover_desc');
+  const [lojaMetricaArea, setLojaMetricaArea] = useState<'taxa' | 'demissoes'>('taxa');
 
   // Paginação e UI
   const [currentPage, setCurrentPage] = useState(1);
@@ -220,6 +322,135 @@ export default function Turnover() {
     }
   };
 
+  // Opções exclusivas extraídas da lista completa de lojas da área
+  const areaCoordOpcoes = useMemo(() => {
+    const coords = new Set<string>();
+    graficos.lojas.forEach(l => {
+      if (l.coordenador) coords.add(l.coordenador);
+    });
+    return Array.from(coords).sort();
+  }, [graficos.lojas]);
+
+  const areaSuperOpcoes = useMemo(() => {
+    const supers = new Set<string>();
+    graficos.lojas.forEach(l => {
+      if (l.supervisor) supers.add(l.supervisor);
+    });
+    return Array.from(supers).sort();
+  }, [graficos.lojas]);
+
+  const areaUfOpcoes = useMemo(() => {
+    const ufs = new Set<string>();
+    graficos.lojas.forEach(l => {
+      if (l.uf && l.uf !== 'N/A') ufs.add(l.uf);
+    });
+    return Array.from(ufs).sort();
+  }, [graficos.lojas]);
+
+  // Filtragem e ordenação dinâmica exclusiva da área de lojas
+  const lojasFiltradasGrafico = useMemo(() => {
+    let result = [...graficos.lojas];
+
+    // Busca rápida por nome/número de loja
+    if (lojaBuscaArea.trim()) {
+      const q = lojaBuscaArea.toLowerCase().trim();
+      result = result.filter(l => l.loja.toLowerCase().includes(q));
+    }
+
+    // Coordenador exclusivo
+    if (lojaCoordArea) {
+      result = result.filter(l => l.coordenador === lojaCoordArea);
+    }
+
+    // Supervisor exclusivo
+    if (lojaSuperArea) {
+      result = result.filter(l => l.supervisor === lojaSuperArea);
+    }
+
+    // UF exclusiva
+    if (lojaUfArea) {
+      result = result.filter(l => l.uf === lojaUfArea);
+    }
+
+    // Status / Faixa
+    if (lojaStatusArea === 'com_turnover') {
+      result = result.filter(l => l.demissoes > 0);
+    } else if (lojaStatusArea === 'sem_turnover') {
+      result = result.filter(l => l.demissoes === 0);
+    } else if (lojaStatusArea === 'critico') {
+      result = result.filter(l => (l.taxa_turnover ?? l.quantidade) >= 20);
+    }
+
+    // Ordenação
+    result.sort((a, b) => {
+      const taxaA = a.taxa_turnover ?? a.quantidade;
+      const taxaB = b.taxa_turnover ?? b.quantidade;
+      if (lojaOrdenacaoArea === 'turnover_desc') {
+        return taxaB - taxaA || b.demissoes - a.demissoes;
+      }
+      if (lojaOrdenacaoArea === 'turnover_asc') {
+        return taxaA - taxaB || a.demissoes - b.demissoes;
+      }
+      if (lojaOrdenacaoArea === 'demissoes_desc') {
+        return b.demissoes - a.demissoes || taxaB - taxaA;
+      }
+      if (lojaOrdenacaoArea === 'nome_asc') {
+        return a.loja.localeCompare(b.loja, undefined, { numeric: true });
+      }
+      if (lojaOrdenacaoArea === 'nome_desc') {
+        return b.loja.localeCompare(a.loja, undefined, { numeric: true });
+      }
+      return 0;
+    });
+
+    // Limites de Top N se selecionados
+    if (lojaStatusArea === 'top10') {
+      result = result.slice(0, 10);
+    } else if (lojaStatusArea === 'top20') {
+      result = result.slice(0, 20);
+    } else if (lojaStatusArea === 'top50') {
+      result = result.slice(0, 50);
+    }
+
+    return result;
+  }, [graficos.lojas, lojaBuscaArea, lojaCoordArea, lojaSuperArea, lojaUfArea, lojaStatusArea, lojaOrdenacaoArea]);
+
+  // Estatísticas agregadas das lojas visíveis no gráfico
+  const statsAreaLojas = useMemo(() => {
+    const total = lojasFiltradasGrafico.length;
+    const totalDem = lojasFiltradasGrafico.reduce((acc, l) => acc + l.demissoes, 0);
+    const totalQuad = lojasFiltradasGrafico.reduce((acc, l) => acc + l.quadro, 0);
+    const media = totalQuad > 0 ? (totalDem / totalQuad) * 100 : 0;
+    const maiorTaxa = lojasFiltradasGrafico.length > 0 
+      ? Math.max(...lojasFiltradasGrafico.map(l => l.taxa_turnover ?? l.quantidade))
+      : 0;
+
+    return { total, totalDem, totalQuad, media, maiorTaxa };
+  }, [lojasFiltradasGrafico]);
+
+  const temFiltroAreaAtivo = Boolean(
+    lojaBuscaArea ||
+    lojaCoordArea ||
+    lojaSuperArea ||
+    lojaUfArea ||
+    lojaStatusArea !== 'todas' ||
+    lojaOrdenacaoArea !== 'turnover_desc' ||
+    lojaMetricaArea !== 'taxa'
+  );
+
+  const handleLimparFiltrosArea = () => {
+    setLojaBuscaArea('');
+    setLojaCoordArea('');
+    setLojaSuperArea('');
+    setLojaUfArea('');
+    setLojaStatusArea('todas');
+    setLojaOrdenacaoArea('turnover_desc');
+    setLojaMetricaArea('taxa');
+  };
+
+  // Largura calculada dinamicamente para garantir que cada barra vertical e rótulo fique nítido
+  const larguraMinimaGrafico = Math.max(800, lojasFiltradasGrafico.length * 36);
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -238,7 +469,7 @@ export default function Turnover() {
         </div>
       )}
 
-      {/* Formulário de Filtros */}
+      {/* Formulário de Filtros Globais */}
       <form onSubmit={handleSearchSubmit} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
           <h2 className="text-xs font-bold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider">
@@ -449,8 +680,8 @@ export default function Turnover() {
         </div>
       </div>
 
-      {/* Gráficos em Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Gráficos em Grid Resumido */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Gráfico 1: Evolução Mensal */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
@@ -458,7 +689,7 @@ export default function Turnover() {
             <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Admissões vs Demissões</h3>
             <p className="text-[11px] text-neutral-450">Comparativo temporal de contratações e desligamentos</p>
           </div>
-          <div className="h-80 w-full">
+          <div className="h-72 w-full">
             {loadingData ? (
               <div className="w-full h-full bg-neutral-50 dark:bg-neutral-850 animate-pulse rounded-xl" />
             ) : graficos.mensal.length === 0 ? (
@@ -484,14 +715,14 @@ export default function Turnover() {
             <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Motivos dos Desligamentos</h3>
             <p className="text-[11px] text-neutral-450">Distribuição percentual por motivo mapeado</p>
           </div>
-          <div className="h-80 w-full flex flex-col sm:flex-row items-center justify-center">
+          <div className="h-72 w-full flex flex-col sm:flex-row items-center justify-center">
             {loadingData ? (
               <div className="w-full h-full bg-neutral-50 dark:bg-neutral-850 animate-pulse rounded-xl" />
             ) : graficos.motivo.length === 0 ? (
               <div className="w-full h-full flex items-center justify-center text-neutral-450 text-xs">Sem motivos mapeados no período</div>
             ) : (
               <>
-                <div className="h-60 w-60 shrink-0">
+                <div className="h-52 w-52 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -500,8 +731,8 @@ export default function Turnover() {
                         nameKey="motivo"
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
+                        innerRadius={50}
+                        outerRadius={70}
                         paddingAngle={3}
                       >
                         {graficos.motivo.map((_, index) => (
@@ -512,12 +743,12 @@ export default function Turnover() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex flex-col gap-2 overflow-y-auto max-h-60 w-full px-4 text-xs">
+                <div className="flex flex-col gap-2 overflow-y-auto max-h-52 w-full px-2 text-xs">
                   {graficos.motivo.map((entry, index) => (
                     <div key={index} className="flex items-center justify-between border-b border-neutral-50 dark:border-neutral-850/50 pb-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-xs shrink-0" style={{ backgroundColor: CORES_CHART[index % CORES_CHART.length] }} />
-                        <span className="font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[150px]">{entry.motivo}</span>
+                        <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: CORES_CHART[index % CORES_CHART.length] }} />
+                        <span className="font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[120px]">{entry.motivo}</span>
                       </div>
                       <span className="font-bold text-neutral-900 dark:text-neutral-50">{entry.quantidade}</span>
                     </div>
@@ -531,10 +762,10 @@ export default function Turnover() {
         {/* Gráfico 3: Turnover por Coordenador */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
           <div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Taxa de Turnover por Coordenador</h3>
-            <p className="text-[11px] text-neutral-450">Índice percentual (Demissões / Admissões) por coordenador</p>
+            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Taxa por Coordenador</h3>
+            <p className="text-[11px] text-neutral-450">Índice percentual (Demissões / Quadro) por equipe</p>
           </div>
-          <div className="h-80 w-full">
+          <div className="h-72 w-full">
             {loadingData ? (
               <div className="w-full h-full bg-neutral-50 dark:bg-neutral-850 animate-pulse rounded-xl" />
             ) : graficos.coordenador.length === 0 ? (
@@ -553,29 +784,304 @@ export default function Turnover() {
           </div>
         </div>
 
-        {/* Gráfico 4: Ranking Top 10 Lojas */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Top 10 Lojas por Taxa de Turnover</h3>
-            <p className="text-[11px] text-neutral-450">Unidades com maior percentual de rotatividade de equipe</p>
+      </div>
+
+      {/* SEÇÃO PRINCIPAL: Gráfico de Barras Verticais de Todas as Lojas com Filtros Exclusivos */}
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-5">
+        
+        {/* Cabeçalho da Seção */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-neutral-100 dark:border-neutral-800 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500">
+                <Store className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                  Taxa de Turnover por Loja Física
+                  <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                    {statsAreaLojas.total} de {graficos.lojas.length} lojas
+                  </span>
+                </h3>
+                <p className="text-xs text-neutral-450">
+                  Visão comparativa de rotatividade e desligamentos em todas as lojas da rede
+                </p>
+              </div>
+            </div>
           </div>
-          <div className="h-80 w-full">
-            {loadingData ? (
-              <div className="w-full h-full bg-neutral-50 dark:bg-neutral-850 animate-pulse rounded-xl" />
-            ) : graficos.lojas.length === 0 ? (
-              <div className="w-full h-full flex items-center justify-center text-neutral-450 text-xs">Sem unidades registradas no período</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficos.lojas} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-neutral-800" />
-                  <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                  <YAxis dataKey="loja" type="category" tick={{ fontSize: 9, fill: '#94a3b8' }} width={80} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="quantidade" fill="#6366f1" radius={[0, 4, 4, 0]} name="Taxa de Turnover" />
-                </BarChart>
-              </ResponsiveContainer>
+
+          {/* Badges de Métricas Rápidas da Seleção */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-violet-500" />
+              <span className="text-neutral-500 text-[11px]">Média da Seleção:</span>
+              <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.media.toFixed(1)}%</span>
+            </div>
+
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
+              <UserX className="h-3.5 w-3.5 text-rose-500" />
+              <span className="text-neutral-500 text-[11px]">Total Demissões:</span>
+              <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.totalDem}</span>
+            </div>
+
+            <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
+              <TrendingDown className="h-3.5 w-3.5 text-amber-500" />
+              <span className="text-neutral-500 text-[11px]">Pico Máximo:</span>
+              <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.maiorTaxa.toFixed(1)}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Barra de Filtros Exclusivos desta Área */}
+        <div className="p-4 bg-neutral-50/60 dark:bg-neutral-850/40 border border-neutral-200/60 dark:border-neutral-800/70 rounded-xl space-y-3">
+          <div className="flex items-center justify-between text-xs font-bold text-neutral-700 dark:text-neutral-300">
+            <div className="flex items-center gap-2">
+              <Filter className="h-3.5 w-3.5 text-violet-500" />
+              <span>Filtros Exclusivos do Gráfico de Lojas</span>
+            </div>
+            {temFiltroAreaAtivo && (
+              <button
+                type="button"
+                onClick={handleLimparFiltrosArea}
+                className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Limpar Filtros da Área
+              </button>
             )}
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            
+            {/* Busca Rápida por Loja */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase">Buscar Loja</label>
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Nome ou código..."
+                  value={lojaBuscaArea}
+                  onChange={(e) => setLojaBuscaArea(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Coordenador Exclusivo */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase">Coordenador</label>
+              <select
+                value={lojaCoordArea}
+                onChange={(e) => setLojaCoordArea(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+              >
+                <option value="">Todos os Coordenadores</option>
+                {areaCoordOpcoes.map((coord, idx) => (
+                  <option key={idx} value={coord}>{coord}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Supervisor Exclusivo */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase">Supervisor</label>
+              <select
+                value={lojaSuperArea}
+                onChange={(e) => setLojaSuperArea(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+              >
+                <option value="">Todos os Supervisores</option>
+                {areaSuperOpcoes.map((sup, idx) => (
+                  <option key={idx} value={sup}>{sup}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* UF Exclusiva */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase">UF</label>
+              <select
+                value={lojaUfArea}
+                onChange={(e) => setLojaUfArea(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+              >
+                <option value="">Todas as UFs</option>
+                {areaUfOpcoes.map((uf, idx) => (
+                  <option key={idx} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Exibição / Faixa de Status */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase">Visualização</label>
+              <select
+                value={lojaStatusArea}
+                onChange={(e) => setLojaStatusArea(e.target.value as any)}
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+              >
+                <option value="todas">Todas as Lojas (Rede Completa)</option>
+                <option value="com_turnover">Com Turnover (&gt; 0%)</option>
+                <option value="top10">Top 10 Lojas</option>
+                <option value="top20">Top 20 Lojas</option>
+                <option value="top50">Top 50 Lojas</option>
+                <option value="critico">Turnover Crítico (≥ 20%)</option>
+                <option value="sem_turnover">Sem Desligamentos (0%)</option>
+              </select>
+            </div>
+
+            {/* Ordenação */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-neutral-500 uppercase flex items-center gap-1">
+                <ArrowUpDown className="h-2.5 w-2.5" /> Ordenar Por
+              </label>
+              <select
+                value={lojaOrdenacaoArea}
+                onChange={(e) => setLojaOrdenacaoArea(e.target.value as any)}
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-700 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+              >
+                <option value="turnover_desc">Maior Turnover (%)</option>
+                <option value="turnover_asc">Menor Turnover (%)</option>
+                <option value="demissoes_desc">Mais Demissões</option>
+                <option value="nome_asc">Nome da Loja (A-Z)</option>
+                <option value="nome_desc">Nome da Loja (Z-A)</option>
+              </select>
+            </div>
+
+          </div>
+
+          {/* Alternador de Métrica e Legenda */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-neutral-200/50 dark:border-neutral-800/50">
+            {/* Alternador de Métrica */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[10px] font-bold text-neutral-500 uppercase">Métrica do Gráfico:</span>
+              <div className="flex bg-neutral-200/60 dark:bg-neutral-800 p-0.5 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLojaMetricaArea('taxa');
+                    setLojaOrdenacaoArea('turnover_desc');
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    lojaMetricaArea === 'taxa'
+                      ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
+                >
+                  Taxa de Turnover (%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLojaMetricaArea('demissoes');
+                    setLojaOrdenacaoArea('demissoes_desc');
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    lojaMetricaArea === 'demissoes'
+                      ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
+                >
+                  Qtd. de Demissões
+                </button>
+              </div>
+            </div>
+
+            {/* Legenda de Cores */}
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500 font-medium">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#f43f5e]" />
+                <span>≥ 25% (Crítico)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#f59e0b]" />
+                <span>15% - 24% (Atenção)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#6366f1]" />
+                <span>5% - 14% (Moderado)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#10b981]" />
+                <span>0% (Sem Demissões)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfico de Barras Verticais Responsivo com Rolagem Horizontal Fluida */}
+        <div className="w-full">
+          {loadingData ? (
+            <div className="w-full h-88 bg-neutral-50 dark:bg-neutral-850 animate-pulse rounded-xl" />
+          ) : lojasFiltradasGrafico.length === 0 ? (
+            <div className="w-full h-88 flex flex-col items-center justify-center text-neutral-450 text-xs space-y-2 border border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl">
+              <Store className="h-8 w-8 text-neutral-300 dark:text-neutral-700" />
+              <span>Nenhuma loja encontrada com os filtros selecionados para esta área.</span>
+              {temFiltroAreaAtivo && (
+                <button
+                  type="button"
+                  onClick={handleLimparFiltrosArea}
+                  className="px-4 py-1.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-full font-bold text-xs hover:bg-neutral-200 cursor-pointer"
+                >
+                  Restaurar Filtros da Área
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="w-full overflow-x-auto pb-2 custom-scrollbar">
+              <div style={{ minWidth: `${larguraMinimaGrafico}px`, height: '360px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={lojasFiltradasGrafico} 
+                    margin={{ top: 20, right: 20, left: -10, bottom: 65 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-neutral-800/80" />
+                    <XAxis
+                      dataKey="loja"
+                      tick={{ fontSize: 9, fill: '#94a3b8' }}
+                      interval={0}
+                      angle={-45}
+                      textAnchor="end"
+                      height={65}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#94a3b8' }}
+                      tickFormatter={(v) => lojaMetricaArea === 'taxa' ? `${v}%` : `${v}`}
+                    />
+                    <Tooltip content={<LojaCustomTooltip metrica={lojaMetricaArea} />} />
+                    {lojaMetricaArea === 'taxa' && statsAreaLojas.media > 0 && (
+                      <ReferenceLine
+                        y={statsAreaLojas.media}
+                        stroke="#f59e0b"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `Média: ${statsAreaLojas.media.toFixed(1)}%`,
+                          fill: '#f59e0b',
+                          fontSize: 10,
+                          position: 'top',
+                          fontWeight: 600
+                        }}
+                      />
+                    )}
+                    <Bar
+                      dataKey={lojaMetricaArea === 'taxa' ? 'quantidade' : 'demissoes'}
+                      radius={[4, 4, 0, 0]}
+                      name={lojaMetricaArea === 'taxa' ? 'Taxa de Turnover (%)' : 'Demissões'}
+                    >
+                      {lojasFiltradasGrafico.map((entry, index) => (
+                        <Cell
+                          key={`loja-bar-${index}`}
+                          fill={getBarColor(entry, lojaMetricaArea)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

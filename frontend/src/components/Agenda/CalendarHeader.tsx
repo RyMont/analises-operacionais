@@ -24,13 +24,13 @@ export function CalendarHeader({
   isDragging
 }: CalendarHeaderProps) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-left">
-        <h3 className="text-xl font-bold text-neutral-900 dark:text-neutral-50">
+        <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-50">
           {selectedColaborador ? `Roteiro: ${selectedColaborador.nome}` : 'Selecione um Colaborador'}
         </h3>
         {selectedColaborador && (
-          <p className="text-sm text-neutral-500 font-medium">
+          <p className="text-xs text-neutral-500 font-medium">
             Gestão de atividades para {monthNames[month]} de {year}
           </p>
         )}

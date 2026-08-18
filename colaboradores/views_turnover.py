@@ -249,31 +249,65 @@ def turnover_list_api(request):
             })
     dados_grafico_coordenador = sorted(dados_grafico_coordenador, key=lambda x: x["quantidade"], reverse=True)
 
-    # Top 10 Lojas por Taxa de Turnover (Demissões / Quadro da Loja)
+    # Estatísticas de Todas as Lojas por Taxa de Turnover (Demissões / Quadro da Loja)
     lojas_stats = {}
     for l in lojas_all:
-        lojas_stats[l.nome_referencia] = {"quadro": obter_quadro_valor(l), "demissoes": 0}
+        lojas_stats[l.nome_referencia] = {
+            "id": l.id,
+            "loja": l.nome_referencia,
+            "quadro": obter_quadro_valor(l),
+            "demissoes": 0,
+            "admissoes": 0,
+            "coordenador": l.coordenador.nome if l.coordenador else "Sem Coordenador",
+            "supervisor": l.supervisor.nome if l.supervisor else "Sem Supervisor",
+            "uf": l.uf or "N/A",
+        }
 
     for c in demitidos_filtrados:
         if c.loja_resolvida:
             loja_nome = c.loja_resolvida.nome_referencia
             if loja_nome not in lojas_stats:
-                lojas_stats[loja_nome] = {"quadro": obter_quadro_valor(c.loja_resolvida), "demissoes": 0}
+                lojas_stats[loja_nome] = {
+                    "id": c.loja_resolvida.id,
+                    "loja": loja_nome,
+                    "quadro": obter_quadro_valor(c.loja_resolvida),
+                    "demissoes": 0,
+                    "admissoes": 0,
+                    "coordenador": c.loja_resolvida.coordenador.nome if c.loja_resolvida.coordenador else "Sem Coordenador",
+                    "supervisor": c.loja_resolvida.supervisor.nome if c.loja_resolvida.supervisor else "Sem Supervisor",
+                    "uf": c.loja_resolvida.uf or "N/A",
+                }
             lojas_stats[loja_nome]["demissoes"] += 1
+
+    for c in admitidos_no_periodo:
+        if c.loja_resolvida:
+            loja_nome = c.loja_resolvida.nome_referencia
+            if loja_nome in lojas_stats:
+                lojas_stats[loja_nome]["admissoes"] += 1
 
     dados_grafico_lojas = []
     for loja_nome, stats in lojas_stats.items():
         dem = stats["demissoes"]
         quad = stats["quadro"]
+        adm = stats.get("admissoes", 0)
         taxa = (dem / quad * 100.0) if quad > 0 else 0.0
-        if dem > 0:
-            dados_grafico_lojas.append({
-                "loja": loja_nome,
-                "quantidade": round(taxa, 1),
-                "quadro": quad,
-                "demissoes": dem
-            })
-    dados_grafico_lojas = sorted(dados_grafico_lojas, key=lambda x: x["quantidade"], reverse=True)[:10]
+        dados_grafico_lojas.append({
+            "id": stats.get("id"),
+            "loja": loja_nome,
+            "coordenador": stats.get("coordenador", "Sem Coordenador"),
+            "supervisor": stats.get("supervisor", "Sem Supervisor"),
+            "uf": stats.get("uf", "N/A"),
+            "quantidade": round(taxa, 1),
+            "taxa_turnover": round(taxa, 1),
+            "quadro": quad,
+            "demissoes": dem,
+            "admissoes": adm
+        })
+    dados_grafico_lojas = sorted(
+        dados_grafico_lojas,
+        key=lambda x: (x["quantidade"], x["demissoes"]),
+        reverse=True
+    )
 
     # Distribuição de demitidos por Cargo
     cargo_dict = {}
