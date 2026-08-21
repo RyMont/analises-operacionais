@@ -35,6 +35,8 @@ def obter_modulo_por_view(view_name, path):
         return "headcount"
     elif "importacoes" in path_lower:
         return "importacoes"
+    elif "cargos" in path_lower or "cargo" in path_lower:
+        return "colaboradores"
     elif "salarios" in path_lower or "salario" in path_lower:
         return "salarios"
     elif "lojas" in path_lower or "stores" in path_lower:
@@ -83,6 +85,8 @@ class IsAdministrador(BasePermission):
             if action == "view":
                 return perm.can_view
             elif action == "create":
+                if "atribuir" in request.path.lower() or "save" in request.path.lower():
+                    return perm.can_create or perm.can_edit
                 return perm.can_create
             elif action == "edit":
                 return perm.can_edit
