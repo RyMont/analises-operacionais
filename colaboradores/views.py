@@ -4,7 +4,14 @@ from .view_utils import (
     funcao_esta_divergente,
     normalizar_funcao_para_comparacao,
 )
-from .views_listas import colaborador_list, demitido_list, status_gestao_opcoes, colaborador_filtro_opcoes
+from .views_listas import (
+    colaborador_list,
+    demitido_list,
+    status_gestao_opcoes,
+    colaborador_filtro_opcoes,
+    colaborador_atribuir_cargo_api,
+    colaborador_detail_update_api,
+)
 from .views_turnover import turnover_list_api, turnover_filtro_opcoes_api
 from .views_sync import (
     exportar_pendencias_lojas_geovictoria,
@@ -33,6 +40,8 @@ __all__ = [
     "demitido_list",
     "status_gestao_opcoes",
     "colaborador_filtro_opcoes",
+    "colaborador_atribuir_cargo_api",
+    "colaborador_detail_update_api",
     "turnover_list_api",
     "turnover_filtro_opcoes_api",
     "derive_termino_state",

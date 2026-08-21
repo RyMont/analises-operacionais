@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Edit3, Trash2, AlertCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, AlertCircle, X, ChevronLeft, ChevronRight, Briefcase } from 'lucide-react';
 import api from '../api/client';
 import SearchableSelect from '../components/ui/searchable-select';
+import NovoCargoModal from '../components/Salarios/NovoCargoModal';
 
 interface Cargo {
   id: string;
@@ -36,6 +37,7 @@ export default function Salarios() {
 
   // Modais
   const [showModal, setShowModal] = useState(false);
+  const [showCargoModal, setShowCargoModal] = useState(false);
   const [selectedSalario, setSelectedSalario] = useState<Salario | null>(null);
 
   // Formulário
@@ -186,13 +188,22 @@ export default function Salarios() {
           <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Salários Base por Região (Dissídios)</h1>
           <p className="text-xs text-neutral-500">Tabela de remunerações base por cargo, UF e ano para estimativas operacionais</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-full text-xs font-bold hover:bg-neutral-850 dark:hover:bg-neutral-100 shadow-xs transition-all cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          Novo Salário Base
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowCargoModal(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 rounded-full text-xs font-bold hover:bg-neutral-100 dark:hover:bg-neutral-750 shadow-xs transition-all cursor-pointer"
+          >
+            <Briefcase className="h-4 w-4" />
+            Novo Cargo
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-full text-xs font-bold hover:bg-neutral-850 dark:hover:bg-neutral-100 shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Salário Base
+          </button>
+        </div>
       </div>
 
       {/* Painel de Filtros */}
@@ -462,6 +473,18 @@ export default function Salarios() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal de Gestão de Cargos */}
+      {showCargoModal && (
+        <NovoCargoModal
+          cargos={cargos}
+          onClose={() => setShowCargoModal(false)}
+          onCargoUpdated={() => {
+            fetchCargos();
+            fetchSalarios();
+          }}
+        />
       )}
     </div>
   );

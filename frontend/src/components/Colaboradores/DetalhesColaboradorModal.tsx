@@ -1,5 +1,7 @@
-import { useRef } from 'react';
-import { User, X, Layers, Calendar } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { User, X, Layers, Calendar, Edit3, Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import api from '../../api/client';
 import type { Colaborador } from './ColaboradoresTable';
 import { formatDate } from '../../utils/formatters';
 import { getStatusBadge } from '../../utils/badges';
@@ -8,6 +10,7 @@ import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 interface DetalhesColaboradorModalProps {
   colab: Colaborador;
   onClose: () => void;
+  onColaboradorUpdated?: (colab: Colaborador) => void;
 }
 
 /**
@@ -15,14 +18,65 @@ interface DetalhesColaboradorModalProps {
  * 
  * Por que existe: Permite auditar todos os dados individuais do auxiliar,
  * comparando as bases do TOTVS vs Planilha de Gestão vs GeoVictoria, e
- * monitorando datas de experiência em um pop-up isolado.
+ * monitorando datas de experiência em um pop-up isolado com opção de atribuição de cargo.
  */
 export default function DetalhesColaboradorModal({
-  colab,
+  colab: initialColab,
   onClose,
+  onColaboradorUpdated,
 }: DetalhesColaboradorModalProps) {
+  const [colab, setColab] = useState<Colaborador>(initialColab);
+  const [isEditingCargo, setIsEditingCargo] = useState(false);
+  const [cargosDisponiveis, setCargosDisponiveis] = useState<{ id: string; nome: string }[]>([]);
+  const [cargoSelecionado, setCargoSelecionado] = useState(initialColab.cargo || '');
+  const [savingCargo, setSavingCargo] = useState(false);
+
   const modalRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(modalRef, onClose);
+
+  useEffect(() => {
+    setColab(initialColab);
+    setCargoSelecionado(initialColab.cargo || '');
+  }, [initialColab]);
+
+  useEffect(() => {
+    if (isEditingCargo && cargosDisponiveis.length === 0) {
+      api.get('/cargos/')
+        .then((res) => {
+          const dados = Array.isArray(res.data) ? res.data : (res.data.results || []);
+          setCargosDisponiveis(dados);
+        })
+        .catch((err) => console.error('Erro ao carregar cargos:', err));
+    }
+  }, [isEditingCargo]);
+
+  const handleSalvarCargo = async () => {
+    const cargoLimpo = cargoSelecionado.trim().toUpperCase();
+    if (!cargoLimpo) {
+      toast.error('Informe um cargo válido.');
+      return;
+    }
+
+    setSavingCargo(true);
+    try {
+      const response = await api.patch(`/colaboradores/${colab.id}/`, {
+        cargo: cargoLimpo,
+      });
+
+      const updated = { ...colab, cargo: cargoLimpo, ...(response.data || {}) };
+      setColab(updated);
+      setIsEditingCargo(false);
+      toast.success(`Cargo atualizado para "${cargoLimpo}" com sucesso!`);
+      if (onColaboradorUpdated) {
+        onColaboradorUpdated(updated);
+      }
+    } catch (err: any) {
+      console.error('Erro ao salvar cargo:', err);
+      toast.error(err.response?.data?.error || 'Erro ao atualizar o cargo do colaborador.');
+    } finally {
+      setSavingCargo(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -91,16 +145,70 @@ export default function DetalhesColaboradorModal({
 
             <div className="grid grid-cols-2 gap-4">
               {/* TOTVS */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1">
-                <span className="block text-[9px] font-bold text-neutral-400 uppercase">
-                  TOTVS (Lotação Física)
-                </span>
-                <span className="text-sm font-semibold">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[9px] font-bold text-neutral-400 uppercase">
+                    TOTVS (Lotação Física)
+                  </span>
+                  {!isEditingCargo ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCargo(true)}
+                      className="text-[10px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 font-semibold cursor-pointer"
+                      title="Editar Cargo"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                      Alterar Cargo
+                    </button>
+                  ) : null}
+                </div>
+                <span className="text-sm font-semibold block">
                   {colab.loja_nome || colab.centro_custo}
                 </span>
-                <span className="block text-[10px] text-neutral-500">
-                  Função: {colab.cargo}
-                </span>
+
+                {isEditingCargo ? (
+                  <div className="pt-1.5 space-y-1.5 animate-fade-in">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        list="cargos-datalist"
+                        value={cargoSelecionado}
+                        onChange={(e) => setCargoSelecionado(e.target.value)}
+                        placeholder="Selecione ou digite o cargo..."
+                        className="w-full px-2.5 py-1 bg-white dark:bg-neutral-900 text-xs border border-neutral-200 dark:border-neutral-700 rounded-md uppercase font-semibold text-neutral-850 dark:text-neutral-200 focus:outline-none"
+                      />
+                      <datalist id="cargos-datalist">
+                        {cargosDisponiveis.map((c) => (
+                          <option key={c.id} value={c.nome} />
+                        ))}
+                      </datalist>
+                      <button
+                        type="button"
+                        disabled={savingCargo}
+                        onClick={handleSalvarCargo}
+                        className="p-1.5 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Salvar"
+                      >
+                        {savingCargo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingCargo(false);
+                          setCargoSelecionado(colab.cargo || '');
+                        }}
+                        className="p-1.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                        title="Cancelar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="block text-[10px] text-neutral-500 font-medium">
+                    Função: <strong className="text-neutral-800 dark:text-neutral-200">{colab.cargo || 'Não informado'}</strong>
+                  </span>
+                )}
               </div>
 
               {/* Gestão Pessoas */}

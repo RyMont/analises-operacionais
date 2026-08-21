@@ -1,12 +1,14 @@
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 import re
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from usuarios.permissions import IsGestaoOrAdministrador
 
-from lojas.models import Loja
+from lojas.models import Loja, Cargo
 from lojas.serializers import LojaSerializer
 
 from .models import Colaborador
@@ -649,3 +651,102 @@ def colaborador_filtro_opcoes(request):
         "status_gestao": status_gestao_list,
         "coordenadores": coordenadores_list
     })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def colaborador_atribuir_cargo_api(request):
+    """
+    Por que existe: Permite atribuir um cargo cadastrado a um ou múltiplos colaboradores
+    selecionados no frontend, atualizando o campo 'cargo' no banco de dados.
+    """
+    cargo_nome = (request.data.get("cargo") or "").strip()
+    colaborador_ids = request.data.get("colaborador_ids") or []
+
+    if not cargo_nome:
+        return Response(
+            {"error": "O nome do cargo é obrigatório."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not colaborador_ids:
+        single_id = request.data.get("colaborador_id")
+        if single_id:
+            colaborador_ids = [single_id]
+        else:
+            return Response(
+                {"error": "Selecione pelo menos um colaborador para atribuir o cargo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # Converte IDs para inteiros caso estejam em string
+    ids_validos = []
+    for cid in colaborador_ids:
+        try:
+            ids_validos.append(int(cid))
+        except (ValueError, TypeError):
+            continue
+
+    if not ids_validos:
+        return Response(
+            {"error": "Nenhum colaborador válido foi selecionado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Garante que o cargo existe na tabela Cargo
+    cargo_obj, _ = Cargo.objects.get_or_create(nome=cargo_nome.upper())
+
+    total_atualizados = Colaborador.objects.filter(id__in=ids_validos).update(
+        cargo=cargo_obj.nome
+    )
+
+    return Response({
+        "success": True,
+        "atualizados": total_atualizados,
+        "cargo": cargo_obj.nome,
+        "message": f"Cargo '{cargo_obj.nome}' atribuído com sucesso a {total_atualizados} colaborador(es)."
+    })
+
+
+@api_view(["GET", "PATCH", "PUT"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def colaborador_detail_update_api(request, pk):
+    """
+    Por que existe: Permite consultar e atualizar individualmente as informações de um colaborador,
+    como cargo, função na gestão, status ou datas contratuais.
+    """
+    colaborador = get_object_or_404(
+        Colaborador.objects.select_related("loja", "loja_gestao", "loja_geo"),
+        pk=pk,
+    )
+
+    if request.method == "GET":
+        serializer = ColaboradorSerializer(colaborador)
+        return Response(serializer.data)
+
+    elif request.method in ["PATCH", "PUT"]:
+        data = request.data
+        if "cargo" in data:
+            novo_cargo = (data["cargo"] or "").strip().upper()
+            if novo_cargo:
+                Cargo.objects.get_or_create(nome=novo_cargo)
+                colaborador.cargo = novo_cargo
+
+        if "funcao_gestao" in data:
+            colaborador.funcao_gestao = data["funcao_gestao"]
+
+        if "status_gestao" in data:
+            colaborador.status_gestao = data["status_gestao"]
+
+        if "data_admissao" in data and data["data_admissao"]:
+            colaborador.data_admissao = data["data_admissao"]
+
+        if "termino_1" in data:
+            colaborador.termino_1 = data["termino_1"] or None
+
+        if "termino_2" in data:
+            colaborador.termino_2 = data["termino_2"] or None
+
+        colaborador.save()
+        serializer = ColaboradorSerializer(colaborador)
+        return Response(serializer.data)

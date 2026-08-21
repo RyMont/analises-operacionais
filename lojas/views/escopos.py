@@ -257,17 +257,68 @@ def escopo_duplicar_proximo_mes(request):
         "message": resumo["mensagem"]
     })
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsAdministrador])
 def cargo_list(request):
     """
-    Esta view existe para expor a listagem de todos os cargos do banco de dados em formato JSON.
-    Ela permite que telas como o cadastro e edição de escopos mensais carreguem dinamicamente
-    as opções disponíveis de funções/cargos para preencher os seletores na interface.
+    Esta view existe para expor a listagem de todos os cargos do banco de dados em formato JSON (GET)
+    ou cadastrar novos cargos parametrizados no sistema (POST).
     """
-    cargos = Cargo.objects.all().order_by("nome")
-    serializer = CargoSerializer(cargos, many=True)
-    return Response(serializer.data)
+    if request.method == "GET":
+        cargos = Cargo.objects.all().order_by("nome")
+        serializer = CargoSerializer(cargos, many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        nome = (request.data.get("nome") or request.data.get("name") or "").strip()
+        if not nome:
+            return Response(
+                {"error": "O nome do cargo é obrigatório."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existente = Cargo.objects.filter(nome__iexact=nome).first()
+        if existente:
+            return Response(CargoSerializer(existente).data, status=status.HTTP_200_OK)
+
+        cargo = Cargo.objects.create(nome=nome.upper())
+        return Response(CargoSerializer(cargo).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def cargo_detail_api(request, pk):
+    """
+    Por que existe: Permite consultar, renomear ou remover cargos cadastrados por ID.
+    """
+    cargo = get_object_or_404(Cargo, pk=pk)
+    if request.method == "GET":
+        return Response(CargoSerializer(cargo).data)
+
+    elif request.method in ["PUT", "PATCH"]:
+        nome = (request.data.get("nome") or request.data.get("name") or "").strip()
+        if not nome:
+            return Response(
+                {"error": "O nome do cargo é obrigatório."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cargo.nome = nome.upper()
+        cargo.save()
+        return Response(CargoSerializer(cargo).data)
+
+    elif request.method == "DELETE":
+        if cargo.salarios.exists():
+            return Response(
+                {"error": "Não é possível excluir este cargo pois existem salários vinculados a ele."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if cargo.itens_escopo_mensal.exists():
+            return Response(
+                {"error": "Não é possível excluir este cargo pois existem itens de escopo vinculados a ele."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cargo.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])

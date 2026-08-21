@@ -395,6 +395,12 @@ export default function Colaboradores() {
         <DetalhesColaboradorModal
           colab={selectedColab}
           onClose={() => setShowDetailModal(false)}
+          onColaboradorUpdated={(updatedColab) => {
+            setSelectedColab(updatedColab);
+            setColaboradores((prev) =>
+              prev.map((c) => (c.id === updatedColab.id ? updatedColab : c))
+            );
+          }}
         />
       )}
     </div>

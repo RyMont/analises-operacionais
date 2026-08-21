@@ -148,12 +148,12 @@ def colaborador_ativos_completo(request):
     à medida que o usuário digita na busca para não pesar o carregamento inicial da Agenda.
     """
     busca = request.GET.get("busca", "").strip()
-    if not busca:
-        return Response([])
-
-    # Filtra no banco apenas os que não estão desligados para processar em memória
-    colaboradores_qs = Colaborador.objects.exclude(status="D")
+    colaboradores_qs = Colaborador.objects.exclude(status="D").exclude(cargo="AUXILIAR ADMINISTRAT")
     
+    if not busca:
+        serializer = ColaboradorLightSerializer(colaboradores_qs[:50], many=True)
+        return Response(serializer.data)
+
     # Normaliza a busca para ignorar acentos e maiúsculas/minúsculas
     busca_norm = unidecode(busca).lower()
     
@@ -163,6 +163,8 @@ def colaborador_ativos_completo(request):
         re_norm = unidecode(c.re or "").lower()
         if busca_norm in nome_norm or busca_norm in re_norm:
             colabs_filtrados.append(c)
+            if len(colabs_filtrados) >= 50:
+                break
 
     serializer = ColaboradorLightSerializer(colabs_filtrados, many=True)
     return Response(serializer.data)

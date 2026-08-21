@@ -13,6 +13,7 @@ from .escopos import (
     escopo_duplicar_proximo_mes,
     escopo_list,
     cargo_list,
+    cargo_detail_api,
     lojas_sem_escopo,
 )
 from .configuracoes import importacoes
@@ -51,6 +52,7 @@ __all__ = [
     "api_item_escopo_delete",
     "api_item_escopo_save",
     "cargo_list",
+    "cargo_detail_api",
     "comparativo_loja",
     "comparativo_relatorio_api",
     "comparativo_filtro_opcoes_api",

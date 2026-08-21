@@ -26,6 +26,7 @@ urlpatterns = [
     path("escopos/api/item/<int:pk>/delete/", views.api_item_escopo_delete, name="api_item_escopo_delete"),
     path("escopos/lojas-sem-escopo/", views.lojas_sem_escopo, name="lojas_sem_escopo"),
     path("cargos/", views.cargo_list, name="cargo_list"),
+    path("cargos/<int:pk>/", views.cargo_detail_api, name="cargo_detail_api"),
     path("lojas/api/coordenadores/", views.coordenador_list_create, name="coordenador_list_create"),
     path("lojas/api/coordenadores/<int:pk>/", views.coordenador_detail_update_delete, name="coordenador_detail_update_delete"),
     path("lojas/api/supervisores/", views.supervisor_list_create, name="supervisor_list_create"),
