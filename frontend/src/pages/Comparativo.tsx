@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import ComparativoFilter from '../components/Comparativo/ComparativoFilter';
 import ComparativoTable, { type ComparativoLinhaData } from '../components/Comparativo/ComparativoTable';
 import ComparativoKPIs from '../components/Comparativo/ComparativoKPIs';
@@ -216,6 +216,20 @@ export default function Comparativo() {
     setDetailModal(prev => ({ ...prev, isOpen: false }));
   };
 
+  // Handler para exportação em lote para Excel (.xlsx)
+  const handleExportarExcel = () => {
+    const params = new URLSearchParams();
+    if (filtros.periodo) params.append('period', filtros.periodo);
+    if (filtros.loja) params.append('loja', filtros.loja);
+    if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+    if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+    if (filtros.uf) params.append('uf', filtros.uf);
+
+    // Utiliza o hostname dinâmico do navegador para garantir funcionamento em rede local e produção
+    const url = `http://${window.location.hostname}:${getBackendPort()}/comparativo/relatorio/exportar/?${params.toString()}`;
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -263,6 +277,7 @@ export default function Comparativo() {
           totalPages={totalPages}
           setCurrentPage={setCurrentPage}
           onVerDetalhes={handleVerDetalhes}
+          onExportarExcel={handleExportarExcel}
         />
       </main>
 

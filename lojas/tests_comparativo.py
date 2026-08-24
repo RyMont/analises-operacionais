@@ -135,6 +135,40 @@ class ComparativoViewsTests(TestCase):
         self.assertIn("competencias", response.data)
         self.assertIn("ufs", response.data)
 
+    def test_comparativo_relatorio_exportar_excel(self):
+        """Testa se a rota de exportação para Excel retorna planilha válida com os dados das lojas."""
+        import pandas as pd
+        from io import BytesIO
+
+        response = self.client.get("/comparativo/relatorio/exportar/", {"period": "2026-03"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("attachment; filename=", response["Content-Disposition"])
+
+        # Lê o conteúdo binário com o pandas para checar se as colunas estão corretas
+        excel_data = BytesIO(response.content)
+        df = pd.read_excel(excel_data, sheet_name="Comparativo Filiais")
+        
+        expected_columns = [
+            "Filial Física",
+            "Supervisor",
+            "Coordenador",
+            "UF",
+            "Orçado (Escopo)",
+            "Real (Folha)",
+            "Desvio",
+        ]
+        self.assertEqual(list(df.columns), expected_columns)
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["Filial Física"], "LOJA MODELO SP")
+        self.assertEqual(df.iloc[0]["UF"], "SP")
+        self.assertEqual(df.iloc[0]["Orçado (Escopo)"], 3600.0)
+        self.assertEqual(df.iloc[0]["Real (Folha)"], 1600.0)
+        self.assertEqual(df.iloc[0]["Desvio"], -2000.0)
+
     def test_comparativo_fallback_escopo_anterior(self):
         """
         Por que existe: Testa se o comparativo busca o escopo anterior mais recente

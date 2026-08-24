@@ -32,7 +32,11 @@ from .stores import (
 )
 
 from .comparativo import comparativo_loja
-from .comparativo_relatorio import comparativo_relatorio_api, comparativo_filtro_opcoes_api
+from .comparativo_relatorio import (
+    comparativo_relatorio_api,
+    comparativo_filtro_opcoes_api,
+    comparativo_relatorio_exportar_excel,
+)
 from .diarias import diarias_list_api, diarias_filtro_opcoes_api
 from .premios import premios_list_api, premios_filtro_opcoes_api
 from .headcount import headcount_analise_api, headcount_loja_colaboradores_api
@@ -56,6 +60,7 @@ __all__ = [
     "comparativo_loja",
     "comparativo_relatorio_api",
     "comparativo_filtro_opcoes_api",
+    "comparativo_relatorio_exportar_excel",
     "competencia_anterior",
     "escopo_create",
     "escopo_delete",

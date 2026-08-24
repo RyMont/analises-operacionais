@@ -59,6 +59,7 @@ urlpatterns = [
     
     path("comparativo/", views.comparativo_loja, name="comparativo_loja"),
     path("comparativo/relatorio/", views.comparativo_relatorio_api, name="comparativo_relatorio_api"),
+    path("comparativo/relatorio/exportar/", views.comparativo_relatorio_exportar_excel, name="comparativo_relatorio_exportar"),
     path("comparativo/filtro-opcoes/", views.comparativo_filtro_opcoes_api, name="comparativo_filtro_opcoes"),
     
     # ========== CALENDÁRIO DE PRESENÇAS GEOVICTORIA ==========

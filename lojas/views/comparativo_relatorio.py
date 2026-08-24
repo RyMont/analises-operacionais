@@ -5,7 +5,12 @@
 import datetime
 from decimal import Decimal
 from collections import defaultdict
+from io import BytesIO
+from typing import List
+import time
+import pandas as pd
 from django.db.models import Q, Sum, Subquery, OuterRef
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -24,7 +29,6 @@ from lojas.models import (
     montar_caches_salario_para_itens,
 )
 from lojas.serializers import LojaSerializer
-import time
 
 _FILTROS_CACHE = None
 _FILTROS_CACHE_TIME = 0.0
@@ -137,12 +141,19 @@ def obter_parametro_lista(request, nome_base: str) -> List[str]:
     return list(set(valores))
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsAdministrador])
-def comparativo_relatorio_api(request):
+def _calcular_dados_comparativo_relatorio(request):
     """
-    API do relatório de Raio-X que calcula os KPIs consolidados, dados para gráficos
-    e retorna a tabela paginada com o comparativo orçado vs real por filial física.
+    Função auxiliar que processa e calcula o comparativo financeiro orçado vs realizado (Raio-X)
+    com base nos filtros passados via query_params na requisição HTTP.
+    
+    Retorna uma tupla contendo:
+    - combinacoes: Lista com todos os registros por filial física consolidada
+    - escopo_total: Total geral orçado
+    - folha_total: Total geral realizado na folha
+    - mensal_map: Dicionário agrupado para evolução mensal
+    - coord_map: Dicionário agrupado de desvio por coordenador
+    - uf_map: Dicionário agrupado de desvio por UF
+    - competencias_list: Lista de tuplas (ano, mes) filtradas
     """
     # 1. Filtros das Lojas
     # Por que existe: Centros de custo específicos do escritório não possuem orçamento planejado no escopo.
@@ -199,8 +210,6 @@ def comparativo_relatorio_api(request):
 
     # Converte competências em datas exatas
     datas_exatas = [datetime.date(ano, mes, 1) for ano, mes in competencias_list]
-    anos_filtrados = list(set(ano for ano, _ in competencias_list))
-    meses_filtrados = list(set(mes for _, mes in competencias_list))
     
     # 3. Cálculo Eficiente de Orçado (Escopo) e Realizado (Folha) Consolidado
     # --- Folha
@@ -219,17 +228,9 @@ def comparativo_relatorio_api(request):
             folha_total += valor
 
     # --- Escopo com Fallback (Vigência Implícita) Otimizado (Query Única O(1))
-    # Por que existe: Se a loja não possuir escopo cadastrado para a competência selecionada,
-    # busca-se o último escopo cadastrado em meses anteriores (fallback) para projetar os valores,
-    # evitando a necessidade de duplicações redundantes no banco. Para evitar queries N+1 no loop,
-    # carregamos todos os escopos das lojas filtradas em uma única query inicial ordenada decrescentemente.
     escopo_total = Decimal("0.00")
     escopo_por_loja_comp = defaultdict(Decimal)
     
-    # Conjunto de competências (ano, mes) que já possuem qualquer dado de folha importado.
-    # Por que existe: Permite identificar de forma global (sem filtros de loja) se a competência
-    # possui folhas importadas no banco, garantindo que lojas com folha zerada na competência
-    # tenham seu orçamento desconsiderado, mesmo quando filtros de loja são aplicados.
     meses_com_folha_geral = set()
     if datas_exatas:
         folhas_existentes = ResumoFolhaMensal.objects.filter(
@@ -239,31 +240,22 @@ def comparativo_relatorio_api(request):
             if dt:
                 meses_com_folha_geral.add((dt.year, dt.month))
 
-    
     if lojas_filtradas_ids:
-        # Otimização N+1: Carrega configs de insalubridade de uma vez
         configs = {cfg.loja_id: cfg for cfg in ConfiguracaoInsalubridadeLoja.objects.filter(loja_id__in=lojas_filtradas_ids)}
-        
-        # Mapeia lojas para acesso rápido no loop
         lojas_dict = {l.id: l for l in lojas_qs}
         
-        # Otimização de Memória & Query: Em vez de carregar TODOS os escopos de todos os tempos da história na memória do Django,
-        # fazemos varreduras indexadas leves para obter apenas os IDs dos escopos das competências desejadas
-        # e o escopo anterior mais recente de cada loja (para servir de fallback).
         min_ano, min_mes = min(competencias_list)
         
         q_exatos = Q()
         for ano, mes in competencias_list:
             q_exatos |= Q(ano=ano, mes=mes)
             
-        # Otimização N+1: Carrega em lote todos os escopos exatos das competências
         escopos_exatos_ids = list(
             EscopoMensal.objects.filter(loja_id__in=lojas_filtradas_ids)
             .filter(q_exatos)
             .values_list("id", flat=True)
         )
 
-        # Otimização N+1: Subquery para obter o ID do último escopo anterior ao período para cada loja de uma vez só
         subquery_fallback = EscopoMensal.objects.filter(
             loja_id=OuterRef("id")
         ).filter(
@@ -277,7 +269,6 @@ def comparativo_relatorio_api(request):
         )
         escopos_fallback_ids = [fid for fid in escopos_fallback_ids if fid is not None]
 
-        # Junta os IDs sem duplicidades
         escopos_ids_para_carregar = list(set(escopos_exatos_ids + escopos_fallback_ids))
                 
         todos_escopos = (
@@ -287,7 +278,6 @@ def comparativo_relatorio_api(request):
             .order_by("-ano", "-mes")
         )
         
-        # Agrupa os escopos reais por loja_id para busca rápida em memória
         escopos_por_loja = defaultdict(list)
         for esc in todos_escopos:
             escopos_por_loja[esc.loja_id].append(esc)
@@ -300,18 +290,14 @@ def comparativo_relatorio_api(request):
             if not loja:
                 continue
                 
-            # Associa a configuração de insalubridade cacheada
             loja._cached_config_insalubridade = configs.get(loja_id) or obter_ou_criar_config_insalubridade_loja(loja)
             escopos_loja = escopos_por_loja.get(loja_id, [])
             
             for ano, mes in competencias_list:
-                # Regra: Se esse mês possui dados de folha de pagamento importados para alguma loja,
-                # só calculamos o escopo para esta loja se ela especificamente tiver folha nesta competência.
                 if (ano, mes) in meses_com_folha_geral:
                     if folha_por_loja_comp.get((loja_id, ano, mes), Decimal("0.00")) <= Decimal("0.00"):
                         continue
 
-                # 1. Tenta achar o escopo exato da competência na lista em memória
                 esc = None
                 for e in escopos_loja:
                     if e.ano == ano and e.mes == mes:
@@ -319,12 +305,10 @@ def comparativo_relatorio_api(request):
                         break
                         
                 if esc is not None:
-                    # Caso exista o escopo real cadastrado para a competência analisada
                     escala = escala_insalubridade_fixa_para_escopo(esc)
                     escala_por_escopo_id[esc.pk] = escala
                     itens_todos.extend(list(esc.itens.all()))
                 else:
-                    # 2. Aplica a busca do último escopo cadastrado anterior à competência na lista em memória
                     esc_fallback = None
                     for e in escopos_loja:
                         if e.ano < ano or (e.ano == ano and e.mes < mes):
@@ -332,7 +316,6 @@ def comparativo_relatorio_api(request):
                             break
                             
                     if esc_fallback is not None:
-                        # Instancia um escopo virtual em memória para a competência analisada
                         esc_virtual = EscopoMensal(
                             id=esc_fallback.id,
                             loja=loja,
@@ -344,7 +327,6 @@ def comparativo_relatorio_api(request):
                         escala = escala_insalubridade_fixa_para_escopo(esc_fallback)
                         escala_por_escopo_id[esc_fallback.id] = escala
                         
-                        # Clona temporariamente os itens de escopo em memória
                         for item_orig in esc_fallback.itens.all():
                             item_fake = ItemEscopoMensal(
                                 id=item_orig.id,
@@ -374,11 +356,7 @@ def comparativo_relatorio_api(request):
 
     # 4. Cruzamento dos Dados e Agrupamento por Loja
     combinacoes = []
-    
-    # Mapeia lojas para busca rápida
     lojas_map = {l.id: l for l in lojas_qs}
-    
-    # Monta a string do período consolidado
     competencias_str = ",".join(f"{ano}-{mes:02d}" for ano, mes in competencias_list)
     
     for loja_id in lojas_filtradas_ids:
@@ -416,26 +394,9 @@ def comparativo_relatorio_api(request):
             "desvio": float(soma_folha - soma_escopo)
         })
         
-    # Ordenação por nome da loja
     combinacoes.sort(key=lambda x: x["loja_nome"])
     
-    # Pagina os resultados
-    page = request.query_params.get("page", 1)
-    page_size = request.query_params.get("page_size", 20)
-    try:
-        page = int(page)
-        page_size = int(page_size)
-    except ValueError:
-        page = 1
-        page_size = 20
-        
-    total_items = len(combinacoes)
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    itens_paginados = combinacoes[start_idx:end_idx]
-    
     # 5. Dados dos Gráficos (Agregações de BI)
-    # Grafico 1: Evolução Mensal (Orçado vs Real)
     mensal_map = defaultdict(lambda: {"orcado": Decimal("0"), "realizado": Decimal("0")})
     coord_map = defaultdict(Decimal)
     uf_map = defaultdict(Decimal)
@@ -462,9 +423,52 @@ def comparativo_relatorio_api(request):
             desvio_loja_comp = v_folha - v_escopo
             coord_map[coordenador_nome] += desvio_loja_comp
             uf_map[uf_sigla] += desvio_loja_comp
-            
+
+    return (
+        combinacoes,
+        escopo_total,
+        folha_total,
+        mensal_map,
+        coord_map,
+        uf_map,
+        competencias_list,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def comparativo_relatorio_api(request):
+    """
+    API do relatório de Raio-X que calcula os KPIs consolidados, dados para gráficos
+    e retorna a tabela paginada com o comparativo orçado vs real por filial física.
+    """
+    (
+        combinacoes,
+        escopo_total,
+        folha_total,
+        mensal_map,
+        coord_map,
+        uf_map,
+        competencias_list,
+    ) = _calcular_dados_comparativo_relatorio(request)
+
+    # Pagina os resultados
+    page = request.query_params.get("page", 1)
+    page_size = request.query_params.get("page_size", 20)
+    try:
+        page = int(page)
+        page_size = int(page_size)
+    except ValueError:
+        page = 1
+        page_size = 20
+        
+    total_items = len(combinacoes)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    itens_paginados = combinacoes[start_idx:end_idx]
+    
+    # Dados dos Gráficos (Agregações de BI)
     dados_grafico_mensal = []
-    # Ordena as competências cronologicamente por (ano, mês)
     for (ano_c, mes_c) in sorted(mensal_map.keys()):
         label = f"{_nome_mes(mes_c)} / {ano_c}"
         dados_grafico_mensal.append({
@@ -474,13 +478,11 @@ def comparativo_relatorio_api(request):
             "desvio": float(mensal_map[(ano_c, mes_c)]["realizado"] - mensal_map[(ano_c, mes_c)]["orcado"])
         })
         
-    # Grafico 2: Desvio por Coordenador (top 10)
     dados_grafico_coordenador = [
         {"coordenador": k, "desvio": float(v)}
         for k, v in sorted(coord_map.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
     ]
 
-    # Grafico 3: Desvio por UF
     dados_grafico_uf = [
         {"uf": k, "desvio": float(v)}
         for k, v in sorted(uf_map.items(), key=lambda x: abs(x[1]), reverse=True)
@@ -502,3 +504,66 @@ def comparativo_relatorio_api(request):
             }
         }
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def comparativo_relatorio_exportar_excel(request):
+    """
+    Exporta a listagem completa da tabela 'Comparativo por Filial Física' (Raio-X)
+    respeitando os filtros aplicados para um arquivo Excel (.xlsx).
+    
+    Colunas incluídas:
+    Filial Física | Supervisor | Coordenador | UF | Orçado (Escopo) | Real (Folha) | Desvio
+    """
+    (
+        combinacoes,
+        escopo_total,
+        folha_total,
+        mensal_map,
+        coord_map,
+        uf_map,
+        competencias_list,
+    ) = _calcular_dados_comparativo_relatorio(request)
+
+    if not combinacoes:
+        return Response(
+            {"error": "Não há dados para exportar com os filtros selecionados."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    data_rows = []
+    for item in combinacoes:
+        data_rows.append({
+            "Filial Física": item["loja_nome"],
+            "Supervisor": item["supervisor"],
+            "Coordenador": item["coordenador"],
+            "UF": item["uf"],
+            "Orçado (Escopo)": item["orcado"],
+            "Real (Folha)": item["realizado"],
+            "Desvio": item["desvio"],
+        })
+
+    df = pd.DataFrame(data_rows)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Comparativo Filiais")
+
+        # Ajusta a largura das colunas
+        worksheet = writer.sheets["Comparativo Filiais"]
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    output.seek(0)
+
+    response = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    data_hoje = datetime.date.today().strftime("%d_%m_%Y")
+    filename = f"comparativo_filiais_{data_hoje}.xlsx"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    return response

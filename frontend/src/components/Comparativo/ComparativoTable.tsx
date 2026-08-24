@@ -1,4 +1,4 @@
-import { Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export interface ComparativoLinhaData {
@@ -21,6 +21,7 @@ interface ComparativoTableProps {
   totalPages: number;
   setCurrentPage: (page: number) => void;
   onVerDetalhes: (lojaId: number, lojaNome: string, competencia: string, competenciaLabel: string) => void;
+  onExportarExcel?: () => void;
 }
 
 export default function ComparativoTable({
@@ -30,6 +31,7 @@ export default function ComparativoTable({
   totalPages,
   setCurrentPage,
   onVerDetalhes,
+  onExportarExcel,
 }: ComparativoTableProps) {
   
   const handlePageChange = (newPage: number) => {
@@ -50,6 +52,18 @@ export default function ComparativoTable({
             Listagem detalhada das metas orçamentárias vs despesas de folha
           </p>
         </div>
+        {onExportarExcel && (
+          <button
+            type="button"
+            onClick={onExportarExcel}
+            disabled={loading || resultados.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar dados para Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Exportar para Excel</span>
+          </button>
+        )}
       </div>
 
       {/* Tabela de Dados */}
