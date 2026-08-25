@@ -12,7 +12,12 @@ import {
   RotateCcw, 
   ArrowUpDown, 
   Filter, 
-  Activity 
+  Activity,
+  DollarSign,
+  Coins,
+  Wallet,
+  Receipt,
+  BarChart3
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -40,6 +45,12 @@ interface ColaboradorDemitido {
   data_demissao: string | null;
   motivo_demissao: string | null;
   status: string;
+  salario_rescisao?: number | string | null;
+  valor_rescisao_estimado?: number | string | null;
+  aviso_indenizado_dias?: number | string | null;
+  ferias_vencidas_dias?: number | string | null;
+  ferias_proporcionais_dias?: number | string | null;
+  ferias_aviso_dias?: number | string | null;
   loja_gestao_nome: string;
   centro_custo: string;
   loja_gestao_coordenador: string;
@@ -57,6 +68,8 @@ interface LojaTurnoverData {
   quadro: number;
   demissoes: number;
   admissoes?: number;
+  valor_rescisao?: number;
+  massa_salarial?: number;
 }
 
 interface FiltroOpcoes {
@@ -70,36 +83,52 @@ interface FiltroOpcoes {
 
 const CORES_CHART = ['#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#8b5cf6', '#6366f1', '#3b82f6', '#0ea5e9', '#10b981', '#f59e0b'];
 
+const formatMoeda = (val?: number | string | null): string => {
+  if (val === null || val === undefined || isNaN(Number(val))) return 'R$ 0,00';
+  return Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const title = data.coordenador || data.loja;
     return (
-      <div className="bg-neutral-900 text-white p-3 rounded-lg border border-neutral-850 text-xs shadow-md space-y-1">
+      <div className="bg-neutral-900/95 text-white p-3.5 rounded-xl border border-neutral-800 text-xs shadow-xl space-y-1.5 backdrop-blur-md">
         <p className="font-bold border-b border-neutral-800 pb-1 mb-1 text-neutral-200">
           {title}
         </p>
-        <p className="text-violet-400 font-semibold">
-          Taxa de Turnover: <span className="font-bold text-white">{data.quantidade}%</span>
-        </p>
-        <p className="text-neutral-400">
-          Quadro Total: <span className="font-bold text-neutral-200">{data.quadro}</span>
-        </p>
-        <p className="text-neutral-400">
-          Total Demissões: <span className="font-bold text-neutral-200">{data.demissoes}</span>
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-neutral-400">Taxa de Turnover:</span>
+          <span className="font-bold text-violet-400">{data.quantidade || data.taxa_turnover || 0}%</span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-neutral-400">Total Demissões:</span>
+          <span className="font-bold text-neutral-200">{data.demissoes ?? '-'}</span>
+        </div>
+        {data.valor_total !== undefined && (
+          <div className="flex items-center justify-between gap-4 border-t border-neutral-800/80 pt-1">
+            <span className="text-neutral-400">Custo Rescisões:</span>
+            <span className="font-bold text-amber-400">{formatMoeda(data.valor_total)}</span>
+          </div>
+        )}
+        {data.massa_salarial !== undefined && (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-neutral-400">Massa Salarial:</span>
+            <span className="font-bold text-neutral-200">{formatMoeda(data.massa_salarial)}</span>
+          </div>
+        )}
       </div>
     );
   }
   return null;
 };
 
-const LojaCustomTooltip = ({ active, payload, metrica }: { active?: boolean; payload?: any[]; metrica?: 'taxa' | 'demissoes' }) => {
+const LojaCustomTooltip = ({ active, payload, metrica }: { active?: boolean; payload?: any[]; metrica?: 'taxa' | 'demissoes' | 'valor' }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const taxa = data.taxa_turnover ?? data.quantidade ?? 0;
     return (
-      <div className="bg-neutral-900/95 text-white p-3.5 rounded-xl border border-neutral-800 text-xs shadow-xl space-y-2 backdrop-blur-md min-w-[210px]">
+      <div className="bg-neutral-900/95 text-white p-3.5 rounded-xl border border-neutral-800 text-xs shadow-xl space-y-2 backdrop-blur-md min-w-[230px]">
         <div className="border-b border-neutral-800 pb-1.5">
           <p className="font-black text-sm text-neutral-100">{data.loja}</p>
           <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
@@ -121,10 +150,14 @@ const LojaCustomTooltip = ({ active, payload, metrica }: { active?: boolean; pay
             <span className="text-neutral-400">Demissões:</span>
             <span className="font-bold text-neutral-100">{data.demissoes}</span>
           </div>
-          {data.admissoes !== undefined && (
+          <div className={`flex items-center justify-between ${metrica === 'valor' ? 'bg-amber-950/40 px-1.5 py-0.5 rounded-sm border border-amber-800/30' : ''}`}>
+            <span className="text-neutral-400">Custo Rescisões:</span>
+            <span className="font-bold text-amber-400">{formatMoeda(data.valor_rescisao)}</span>
+          </div>
+          {data.massa_salarial !== undefined && (
             <div className="flex items-center justify-between">
-              <span className="text-neutral-400">Admissões:</span>
-              <span className="font-bold text-neutral-100">{data.admissoes}</span>
+              <span className="text-neutral-400">Massa Salarial:</span>
+              <span className="font-medium text-neutral-300">{formatMoeda(data.massa_salarial)}</span>
             </div>
           )}
           <div className="flex items-center justify-between">
@@ -144,7 +177,14 @@ const LojaCustomTooltip = ({ active, payload, metrica }: { active?: boolean; pay
   return null;
 };
 
-const getBarColor = (entry: LojaTurnoverData, metrica: 'taxa' | 'demissoes') => {
+const getBarColor = (entry: LojaTurnoverData, metrica: 'taxa' | 'demissoes' | 'valor') => {
+  if (metrica === 'valor') {
+    const val = entry.valor_rescisao || 0;
+    if (val >= 10000) return '#f43f5e';
+    if (val >= 4000) return '#f59e0b';
+    if (val > 0) return '#8b5cf6';
+    return '#10b981';
+  }
   if (metrica === 'demissoes') {
     if (entry.demissoes >= 5) return '#f43f5e';
     if (entry.demissoes >= 2) return '#f59e0b';
@@ -152,19 +192,19 @@ const getBarColor = (entry: LojaTurnoverData, metrica: 'taxa' | 'demissoes') => 
     return '#10b981';
   }
   const taxa = entry.taxa_turnover ?? entry.quantidade ?? 0;
-  if (taxa >= 25) return '#f43f5e'; // Vermelho / Rose para crítico
-  if (taxa >= 15) return '#f59e0b'; // Âmbar para moderado alto
-  if (taxa >= 5) return '#6366f1';  // Índigo para moderado
-  if (taxa > 0) return '#8b5cf6';  // Violeta para baixo
-  return '#10b981';                 // Esmeralda para zero demissões
+  if (taxa >= 25) return '#f43f5e';
+  if (taxa >= 15) return '#f59e0b';
+  if (taxa >= 5) return '#6366f1';
+  if (taxa > 0) return '#8b5cf6';
+  return '#10b981';
 };
 
 /**
  * Tela de Análise de Turnover.
  * 
- * Por que existe: Oferece um painel completo para visualização, análise e filtro
- * dos índices de turnover (desligamentos) da equipe, detalhando motivos de demissão,
- * evolução mensal, distribuição geográfica, gráfico vertical de todas as lojas e tabela paginada.
+ * Oferece painel completo para visualização, análise quantitativa e custos financeiros
+ * de desligamentos da equipe, detalhando motivos de rescisão, impacto monetário,
+ * evolução mensal, ranking de lojas físicas e tabela detalhada.
  */
 export default function Turnover() {
 
@@ -174,12 +214,22 @@ export default function Turnover() {
   const [totalAdmitidos, setTotalAdmitidos] = useState(0);
   const [taxaTurnover, setTaxaTurnover] = useState(0);
   const [saldo, setSaldo] = useState(0);
+
+  // Estados Financeiros Globais
+  const [totalCustoRescisao, setTotalCustoRescisao] = useState(0);
+  const [totalMassaSalarial, setTotalMassaSalarial] = useState(0);
+  const [mediaCustoRescisao, setMediaCustoRescisao] = useState(0);
+  const [mediaSalarioDemissao, setMediaSalarioDemissao] = useState(0);
+
+  // Estado de Visualização dos Gráficos: Quantidade vs Financeiro
+  const [visaoFinanceira, setVisaoFinanceira] = useState(false);
+
   const [graficos, setGraficos] = useState({
-    motivo: [] as { motivo: string; quantidade: number }[],
-    mensal: [] as { mes: string; admissoes: number; demissoes: number }[],
-    coordenador: [] as { coordenador: string; quantidade: number }[],
+    motivo: [] as { motivo: string; quantidade: number; valor_total?: number; massa_salarial?: number; ticket_medio?: number }[],
+    mensal: [] as { mes: string; admissoes: number; demissoes: number; valor_rescisao?: number; massa_salarial?: number }[],
+    coordenador: [] as { coordenador: string; quantidade: number; taxa_turnover?: number; demissoes?: number; quadro?: number; valor_total?: number; massa_salarial?: number }[],
     lojas: [] as LojaTurnoverData[],
-    cargos: [] as { cargo: string; quantidade: number }[]
+    cargos: [] as { cargo: string; quantidade: number; valor_total?: number; massa_salarial?: number }[]
   });
 
   // Estados dos filtros globais do painel
@@ -207,8 +257,8 @@ export default function Turnover() {
   const [lojaSuperArea, setLojaSuperArea] = useState('');
   const [lojaUfArea, setLojaUfArea] = useState('');
   const [lojaStatusArea, setLojaStatusArea] = useState<'todas' | 'com_turnover' | 'top10' | 'top20' | 'top50' | 'critico' | 'sem_turnover'>('todas');
-  const [lojaOrdenacaoArea, setLojaOrdenacaoArea] = useState<'turnover_desc' | 'turnover_asc' | 'demissoes_desc' | 'nome_asc' | 'nome_desc'>('turnover_desc');
-  const [lojaMetricaArea, setLojaMetricaArea] = useState<'taxa' | 'demissoes'>('taxa');
+  const [lojaOrdenacaoArea, setLojaOrdenacaoArea] = useState<'turnover_desc' | 'turnover_asc' | 'demissoes_desc' | 'valor_desc' | 'nome_asc' | 'nome_desc'>('turnover_desc');
+  const [lojaMetricaArea, setLojaMetricaArea] = useState<'taxa' | 'demissoes' | 'valor'>('taxa');
 
   // Paginação e UI
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,6 +321,12 @@ export default function Turnover() {
           setTotalAdmitidos(results.quantidade_admitidos || 0);
           setTaxaTurnover(results.taxa_turnover || 0);
           setSaldo(results.saldo || 0);
+          
+          setTotalCustoRescisao(results.total_custo_rescisao || 0);
+          setTotalMassaSalarial(results.total_massa_salarial_demitida || 0);
+          setMediaCustoRescisao(results.media_custo_rescisao || 0);
+          setMediaSalarioDemissao(results.media_salario_demissao || 0);
+
           setGraficos(results.graficos || { motivo: [], mensal: [], coordenador: [], lojas: [], cargos: [] });
           
           const count = response.data.count || 0;
@@ -394,6 +450,9 @@ export default function Turnover() {
       if (lojaOrdenacaoArea === 'demissoes_desc') {
         return b.demissoes - a.demissoes || taxaB - taxaA;
       }
+      if (lojaOrdenacaoArea === 'valor_desc') {
+        return (b.valor_rescisao || 0) - (a.valor_rescisao || 0) || b.demissoes - a.demissoes;
+      }
       if (lojaOrdenacaoArea === 'nome_asc') {
         return a.loja.localeCompare(b.loja, undefined, { numeric: true });
       }
@@ -420,12 +479,13 @@ export default function Turnover() {
     const total = lojasFiltradasGrafico.length;
     const totalDem = lojasFiltradasGrafico.reduce((acc, l) => acc + l.demissoes, 0);
     const totalQuad = lojasFiltradasGrafico.reduce((acc, l) => acc + l.quadro, 0);
+    const totalValor = lojasFiltradasGrafico.reduce((acc, l) => acc + (l.valor_rescisao || 0), 0);
     const media = totalQuad > 0 ? (totalDem / totalQuad) * 100 : 0;
     const maiorTaxa = lojasFiltradasGrafico.length > 0 
       ? Math.max(...lojasFiltradasGrafico.map(l => l.taxa_turnover ?? l.quantidade))
       : 0;
 
-    return { total, totalDem, totalQuad, media, maiorTaxa };
+    return { total, totalDem, totalQuad, totalValor, media, maiorTaxa };
   }, [lojasFiltradasGrafico]);
 
   const temFiltroAreaAtivo = Boolean(
@@ -449,30 +509,61 @@ export default function Turnover() {
   };
 
   // Largura calculada dinamicamente para garantir que cada barra vertical e rótulo fique nítido
-  const larguraMinimaGrafico = Math.max(800, lojasFiltradasGrafico.length * 36);
+  const larguraMinimaGrafico = Math.max(800, lojasFiltradasGrafico.length * 38);
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50 flex items-center gap-2">
-          <TrendingDown className="h-6 w-6 text-rose-500" />
-          Análise de Turnover
-        </h1>
-        <p className="text-sm text-neutral-500 font-medium">Métricas, motivos de demissão e análise comportamental de desligamentos da equipe</p>
+      {/* Cabeçalho com Toggle de Visão */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-neutral-900 dark:text-neutral-50 flex items-center gap-2.5 tracking-tight">
+            <TrendingDown className="h-7 w-7 text-rose-500" />
+            Análise de Turnover e Custos de Rescisão
+          </h1>
+          <p className="text-sm text-neutral-500 font-medium">Métricas operacionais, motivos de desligamento e impacto financeiro das rescisões</p>
+        </div>
+
+        {/* Alternador de Visão Global (Volume vs Financeiro) */}
+        <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-1 rounded-2xl shadow-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setVisaoFinanceira(false)}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              !visaoFinanceira
+                ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Visão de Volume
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisaoFinanceira(true)}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              visaoFinanceira
+                ? 'bg-amber-500 text-neutral-950 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+          >
+            <DollarSign className="h-3.5 w-3.5" />
+            Visão Financeira (R$)
+          </button>
+        </div>
       </div>
 
       {errorMsg && (
-        <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 rounded-lg text-sm flex gap-3 items-center">
+        <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 rounded-xl text-sm flex gap-3 items-center">
           <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Formulário de Filtros Globais */}
-      <form onSubmit={handleSearchSubmit} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs shadow-sm space-y-4">
+      <form onSubmit={handleSearchSubmit} className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
-          <h2 className="text-xs font-bold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider">
+          <h2 className="text-xs font-bold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-violet-500" />
             Filtros do Painel
           </h2>
         </div>
@@ -627,55 +718,97 @@ export default function Turnover() {
         </div>
       </form>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* KPI Cards Grid - Quantitativo & Financeiro */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Card 1: Demissões */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm flex items-center gap-5">
-          <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0">
-            <UserX className="h-6 w-6" />
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0">
+            <UserX className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Total de Demissões</p>
-            <p className="text-3xl font-black text-neutral-900 dark:text-neutral-50 mt-1">
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Demissões</p>
+            <p className="text-2xl font-black text-neutral-900 dark:text-neutral-50 mt-0.5">
               {loadingData ? '...' : totalDemissoes}
             </p>
-            <p className="text-[10px] text-neutral-400 mt-1">Colaboradores desligados</p>
+            <p className="text-[10px] text-neutral-400">Colaboradores</p>
           </div>
         </div>
 
         {/* Card 2: Admissões */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm flex items-center gap-5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
-            <UserCheck className="h-6 w-6" />
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
+            <UserCheck className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Total de Admissões</p>
-            <p className="text-3xl font-black text-neutral-900 dark:text-neutral-50 mt-1">
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Admissões</p>
+            <p className="text-2xl font-black text-neutral-900 dark:text-neutral-50 mt-0.5">
               {loadingData ? '...' : totalAdmitidos}
             </p>
-            <p className="text-[10px] text-neutral-400 mt-1">Colaboradores admitidos</p>
+            <p className="text-[10px] text-neutral-400">Contratações</p>
           </div>
         </div>
 
         {/* Card 3: Taxa de Turnover */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm flex items-center gap-5">
-          <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500 shrink-0">
-            <Percent className="h-6 w-6" />
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500 shrink-0">
+            <Percent className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Taxa de Turnover</p>
-            <p className="text-3xl font-black text-neutral-900 dark:text-neutral-50 mt-1">
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Turnover</p>
+            <p className="text-2xl font-black text-neutral-900 dark:text-neutral-50 mt-0.5">
               {loadingData ? '...' : `${taxaTurnover.toFixed(1)}%`}
             </p>
-            <p className="text-[10px] font-semibold mt-1 flex items-center gap-1">
+            <p className="text-[10px] font-bold mt-0.5 truncate">
               {saldo > 0 ? (
-                <span className="text-emerald-500">+{saldo} vagas (Saldo Positivo)</span>
+                <span className="text-emerald-500">+{saldo} vagas</span>
               ) : saldo < 0 ? (
-                <span className="text-rose-500">{saldo} vagas (Saldo Negativo)</span>
+                <span className="text-rose-500">{saldo} vagas</span>
               ) : (
-                <span className="text-neutral-500">Saldo Neutro</span>
+                <span className="text-neutral-400">Neutro</span>
               )}
             </p>
+          </div>
+        </div>
+
+        {/* Card 4: Custo Estimado de Rescisões */}
+        <div className="bg-gradient-to-br from-amber-500/5 to-amber-500/15 dark:from-amber-950/20 dark:to-neutral-900 border border-amber-300/40 dark:border-amber-700/40 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+            <Receipt className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider truncate">Custo Rescisões</p>
+            <p className="text-lg font-black text-neutral-900 dark:text-amber-100 mt-0.5 truncate">
+              {loadingData ? '...' : formatMoeda(totalCustoRescisao)}
+            </p>
+            <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80">Verbas indenizadas</p>
+          </div>
+        </div>
+
+        {/* Card 5: Massa Salarial Desligada */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+            <Wallet className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider truncate">Massa Salarial</p>
+            <p className="text-lg font-black text-neutral-900 dark:text-neutral-50 mt-0.5 truncate">
+              {loadingData ? '...' : formatMoeda(totalMassaSalarial)}
+            </p>
+            <p className="text-[10px] text-neutral-400">Média: {formatMoeda(mediaSalarioDemissao)}/mês</p>
+          </div>
+        </div>
+
+        {/* Card 6: Custo Médio por Rescisão */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
+            <Coins className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider truncate">Ticket Médio</p>
+            <p className="text-lg font-black text-neutral-900 dark:text-neutral-50 mt-0.5 truncate">
+              {loadingData ? '...' : formatMoeda(mediaCustoRescisao)}
+            </p>
+            <p className="text-[10px] text-neutral-400">Média / desligamento</p>
           </div>
         </div>
       </div>
@@ -684,10 +817,21 @@ export default function Turnover() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Gráfico 1: Evolução Mensal */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Admissões vs Demissões</h3>
-            <p className="text-[11px] text-neutral-450">Comparativo temporal de contratações e desligamentos</p>
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">
+                {visaoFinanceira ? 'Evolução do Custo de Rescisão' : 'Admissões vs Demissões'}
+              </h3>
+              <p className="text-[11px] text-neutral-450">
+                {visaoFinanceira ? 'Valores gastos com desligamentos mês a mês' : 'Comparativo temporal de contratações e desligamentos'}
+              </p>
+            </div>
+            {visaoFinanceira && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                R$ Gastos
+              </span>
+            )}
           </div>
           <div className="h-72 w-full">
             {loadingData ? (
@@ -696,13 +840,31 @@ export default function Turnover() {
               <div className="w-full h-full flex items-center justify-center text-neutral-450 text-xs">Sem dados históricos no período</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={graficos.mensal} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <LineChart data={graficos.mensal} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-neutral-800" />
                   <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                  <Tooltip contentStyle={{ background: '#171717', border: 'none', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
-                  <Line type="monotone" dataKey="admissoes" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} name="Admissões" />
-                  <Line type="monotone" dataKey="demissoes" stroke="#f43f5e" strokeWidth={3} activeDot={{ r: 8 }} name="Demissões" />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tickFormatter={(v) => visaoFinanceira ? `R$${(v / 1000).toFixed(0)}k` : `${v}`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ background: '#171717', border: 'none', borderRadius: '8px', fontSize: '11px', color: '#fff' }}
+                    formatter={(value: any, name: any) => [
+                      visaoFinanceira || name === 'Custo Rescisões' ? formatMoeda(value) : `${value}`,
+                      name
+                    ]}
+                  />
+                  {visaoFinanceira ? (
+                    <>
+                      <Line type="monotone" dataKey="valor_rescisao" stroke="#f59e0b" strokeWidth={3} activeDot={{ r: 8 }} name="Custo Rescisões" />
+                      <Line type="monotone" dataKey="massa_salarial" stroke="#3b82f6" strokeWidth={2} strokeDasharray="4 4" activeDot={{ r: 6 }} name="Massa Salarial" />
+                    </>
+                  ) : (
+                    <>
+                      <Line type="monotone" dataKey="admissoes" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} name="Admissões" />
+                      <Line type="monotone" dataKey="demissoes" stroke="#f43f5e" strokeWidth={3} activeDot={{ r: 8 }} name="Demissões" />
+                    </>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -710,10 +872,21 @@ export default function Turnover() {
         </div>
 
         {/* Gráfico 2: Motivos de Demissão */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Motivos dos Desligamentos</h3>
-            <p className="text-[11px] text-neutral-450">Distribuição percentual por motivo mapeado</p>
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">
+                {visaoFinanceira ? 'Custos por Motivo' : 'Motivos dos Desligamentos'}
+              </h3>
+              <p className="text-[11px] text-neutral-450">
+                {visaoFinanceira ? 'Impacto financeiro por tipo de rescisão' : 'Distribuição quantitativa por motivo'}
+              </p>
+            </div>
+            {visaoFinanceira && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                R$ Total
+              </span>
+            )}
           </div>
           <div className="h-72 w-full flex flex-col sm:flex-row items-center justify-center">
             {loadingData ? (
@@ -727,7 +900,7 @@ export default function Turnover() {
                     <PieChart>
                       <Pie
                         data={graficos.motivo}
-                        dataKey="quantidade"
+                        dataKey={visaoFinanceira ? "valor_total" : "quantidade"}
                         nameKey="motivo"
                         cx="50%"
                         cy="50%"
@@ -739,18 +912,31 @@ export default function Turnover() {
                           <Cell key={`cell-${index}`} fill={CORES_CHART[index % CORES_CHART.length]} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ background: '#171717', border: 'none', borderRadius: '8px', fontSize: '11px', color: '#fff' }} formatter={(value) => [`${value} demissões`, 'Quantidade']} />
+                      <Tooltip 
+                        contentStyle={{ background: '#171717', border: 'none', borderRadius: '8px', fontSize: '11px', color: '#fff' }} 
+                        formatter={(value: any) => [
+                          visaoFinanceira ? formatMoeda(value) : `${value} demissões`,
+                          visaoFinanceira ? 'Custo Rescisão' : 'Quantidade'
+                        ]}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex flex-col gap-2 overflow-y-auto max-h-52 w-full px-2 text-xs">
+                <div className="flex flex-col gap-2 overflow-y-auto max-h-52 w-full px-2 text-xs custom-scrollbar">
                   {graficos.motivo.map((entry, index) => (
                     <div key={index} className="flex items-center justify-between border-b border-neutral-50 dark:border-neutral-850/50 pb-1.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: CORES_CHART[index % CORES_CHART.length] }} />
                         <span className="font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[120px]">{entry.motivo}</span>
                       </div>
-                      <span className="font-bold text-neutral-900 dark:text-neutral-50">{entry.quantidade}</span>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold text-neutral-900 dark:text-neutral-50 block">
+                          {visaoFinanceira ? formatMoeda(entry.valor_total) : entry.quantidade}
+                        </span>
+                        {visaoFinanceira && entry.quantidade > 0 && (
+                          <span className="text-[10px] text-neutral-400 block">{entry.quantidade} deslig.</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -759,11 +945,22 @@ export default function Turnover() {
           </div>
         </div>
 
-        {/* Gráfico 3: Turnover por Coordenador */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">Taxa por Coordenador</h3>
-            <p className="text-[11px] text-neutral-450">Índice percentual (Demissões / Quadro) por equipe</p>
+        {/* Gráfico 3: Coordenador */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">
+                {visaoFinanceira ? 'Custos por Coordenador' : 'Taxa por Coordenador'}
+              </h3>
+              <p className="text-[11px] text-neutral-450">
+                {visaoFinanceira ? 'Total financeiro de rescisões por coordenação' : 'Índice percentual (Demissões / Quadro) por equipe'}
+              </p>
+            </div>
+            {visaoFinanceira && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                R$ Total
+              </span>
+            )}
           </div>
           <div className="h-72 w-full">
             {loadingData ? (
@@ -772,12 +969,20 @@ export default function Turnover() {
               <div className="w-full h-full flex items-center justify-center text-neutral-450 text-xs">Sem coordenadores no período</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficos.coordenador} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <BarChart data={graficos.coordenador} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" className="dark:stroke-neutral-800" />
                   <XAxis dataKey="coordenador" tick={{ fontSize: 9, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tickFormatter={(v) => visaoFinanceira ? `R$${(v/1000).toFixed(0)}k` : `${v}%`}
+                  />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="quantidade" fill="#a855f7" radius={[4, 4, 0, 0]} name="Taxa de Turnover" />
+                  <Bar 
+                    dataKey={visaoFinanceira ? "valor_total" : "quantidade"} 
+                    fill={visaoFinanceira ? "#f59e0b" : "#a855f7"} 
+                    radius={[4, 4, 0, 0]} 
+                    name={visaoFinanceira ? "Custo Rescisões" : "Taxa de Turnover"} 
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -786,8 +991,8 @@ export default function Turnover() {
 
       </div>
 
-      {/* SEÇÃO PRINCIPAL: Gráfico de Barras Verticais de Todas as Lojas com Filtros Exclusivos */}
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs shadow-sm space-y-5">
+      {/* SEÇÃO PRINCIPAL: Gráfico de Lojas Físicas com Métricas Financeiras e Quantitativas */}
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-xs space-y-5">
         
         {/* Cabeçalho da Seção */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-neutral-100 dark:border-neutral-800 pb-4">
@@ -798,13 +1003,13 @@ export default function Turnover() {
               </div>
               <div>
                 <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                  Taxa de Turnover por Loja Física
+                  Desempenho e Custos por Loja Física
                   <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
                     {statsAreaLojas.total} de {graficos.lojas.length} lojas
                   </span>
                 </h3>
                 <p className="text-xs text-neutral-450">
-                  Visão comparativa de rotatividade e desligamentos em todas as lojas da rede
+                  Visão comparativa de rotatividade, desligamentos e custos rescisórios em toda a rede
                 </p>
               </div>
             </div>
@@ -814,20 +1019,20 @@ export default function Turnover() {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
               <Activity className="h-3.5 w-3.5 text-violet-500" />
-              <span className="text-neutral-500 text-[11px]">Média da Seleção:</span>
+              <span className="text-neutral-500 text-[11px]">Média Turnover:</span>
               <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.media.toFixed(1)}%</span>
             </div>
 
             <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
               <UserX className="h-3.5 w-3.5 text-rose-500" />
-              <span className="text-neutral-500 text-[11px]">Total Demissões:</span>
+              <span className="text-neutral-500 text-[11px]">Demissões:</span>
               <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.totalDem}</span>
             </div>
 
-            <div className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/60 dark:border-neutral-800/80 flex items-center gap-2">
-              <TrendingDown className="h-3.5 w-3.5 text-amber-500" />
-              <span className="text-neutral-500 text-[11px]">Pico Máximo:</span>
-              <span className="font-bold text-neutral-900 dark:text-neutral-100">{statsAreaLojas.maiorTaxa.toFixed(1)}%</span>
+            <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
+              <Receipt className="h-3.5 w-3.5 text-amber-500" />
+              <span className="text-amber-700 dark:text-amber-400 text-[11px] font-medium">Custo Total:</span>
+              <span className="font-black text-amber-800 dark:text-amber-200">{formatMoeda(statsAreaLojas.totalValor)}</span>
             </div>
           </div>
         </div>
@@ -943,6 +1148,7 @@ export default function Turnover() {
               >
                 <option value="turnover_desc">Maior Turnover (%)</option>
                 <option value="turnover_asc">Menor Turnover (%)</option>
+                <option value="valor_desc">Maior Custo Rescisão (R$)</option>
                 <option value="demissoes_desc">Mais Demissões</option>
                 <option value="nome_asc">Nome da Loja (A-Z)</option>
                 <option value="nome_desc">Nome da Loja (Z-A)</option>
@@ -974,6 +1180,20 @@ export default function Turnover() {
                 <button
                   type="button"
                   onClick={() => {
+                    setLojaMetricaArea('valor');
+                    setLojaOrdenacaoArea('valor_desc');
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    lojaMetricaArea === 'valor'
+                      ? 'bg-amber-500 text-neutral-950 shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
+                >
+                  Custo Rescisões (R$)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setLojaMetricaArea('demissoes');
                     setLojaOrdenacaoArea('demissoes_desc');
                   }}
@@ -990,21 +1210,40 @@ export default function Turnover() {
 
             {/* Legenda de Cores */}
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500 font-medium">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-[#f43f5e]" />
-                <span>≥ 25% (Crítico)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-[#f59e0b]" />
-                <span>15% - 24% (Atenção)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-[#6366f1]" />
-                <span>5% - 14% (Moderado)</span>
-              </div>
+              {lojaMetricaArea === 'valor' ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#f43f5e]" />
+                    <span>≥ R$ 10k</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#f59e0b]" />
+                    <span>R$ 4k - R$ 10k</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#8b5cf6]" />
+                    <span>&lt; R$ 4k</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#f43f5e]" />
+                    <span>≥ 25% (Crítico)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#f59e0b]" />
+                    <span>15% - 24% (Atenção)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-[#6366f1]" />
+                    <span>5% - 14% (Moderado)</span>
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-xs bg-[#10b981]" />
-                <span>0% (Sem Demissões)</span>
+                <span>R$ 0 / 0%</span>
               </div>
             </div>
           </div>
@@ -1047,7 +1286,11 @@ export default function Turnover() {
                     />
                     <YAxis
                       tick={{ fontSize: 10, fill: '#94a3b8' }}
-                      tickFormatter={(v) => lojaMetricaArea === 'taxa' ? `${v}%` : `${v}`}
+                      tickFormatter={(v) => {
+                        if (lojaMetricaArea === 'valor') return `R$${(v / 1000).toFixed(0)}k`;
+                        if (lojaMetricaArea === 'taxa') return `${v}%`;
+                        return `${v}`;
+                      }}
                     />
                     <Tooltip content={<LojaCustomTooltip metrica={lojaMetricaArea} />} />
                     {lojaMetricaArea === 'taxa' && statsAreaLojas.media > 0 && (
@@ -1066,9 +1309,21 @@ export default function Turnover() {
                       />
                     )}
                     <Bar
-                      dataKey={lojaMetricaArea === 'taxa' ? 'quantidade' : 'demissoes'}
+                      dataKey={
+                        lojaMetricaArea === 'valor' 
+                          ? 'valor_rescisao' 
+                          : lojaMetricaArea === 'taxa' 
+                            ? 'quantidade' 
+                            : 'demissoes'
+                      }
                       radius={[4, 4, 0, 0]}
-                      name={lojaMetricaArea === 'taxa' ? 'Taxa de Turnover (%)' : 'Demissões'}
+                      name={
+                        lojaMetricaArea === 'valor'
+                          ? 'Custo Rescisões (R$)'
+                          : lojaMetricaArea === 'taxa'
+                            ? 'Taxa de Turnover (%)'
+                            : 'Demissões'
+                      }
                     >
                       {lojasFiltradasGrafico.map((entry, index) => (
                         <Cell
@@ -1086,11 +1341,16 @@ export default function Turnover() {
 
       </div>
 
-      {/* Tabela Detalhada */}
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden shadow-xs shadow-sm">
-        <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/20">
-          <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">Lista Detalhada de Demissões</h3>
-          <p className="text-xs text-neutral-450">Histórico de colaboradores desligados com o respectivo motivo de demissão mapeado</p>
+      {/* Tabela Detalhada com Colunas Financeiras */}
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden shadow-xs">
+        <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">Lista Detalhada de Desligamentos</h3>
+            <p className="text-xs text-neutral-450">Histórico de colaboradores desligados com motivo, salário e custos rescisórios mapeados</p>
+          </div>
+          <div className="text-xs font-semibold text-neutral-500">
+            Total nesta seleção: <span className="font-bold text-neutral-900 dark:text-neutral-100">{totalDemissoes}</span> colaboradores
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -1102,8 +1362,10 @@ export default function Turnover() {
                 <th className="p-4">Cargo</th>
                 <th className="p-4">Loja / CC</th>
                 <th className="p-4">Coordenador</th>
-                <th className="p-4 w-32 text-center">Data Demissão</th>
-                <th className="p-4 w-44">Motivo de Demissão</th>
+                <th className="p-4 w-28 text-center">Demissão</th>
+                <th className="p-4">Motivo</th>
+                <th className="p-4 text-right">Salário Base</th>
+                <th className="p-4 text-right">Custo Rescisão</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-350">
@@ -1117,11 +1379,13 @@ export default function Turnover() {
                     <td className="p-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded-xs w-28" /></td>
                     <td className="p-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded-xs w-20 mx-auto" /></td>
                     <td className="p-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded-xs w-24" /></td>
+                    <td className="p-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded-xs w-20 ml-auto" /></td>
+                    <td className="p-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded-xs w-20 ml-auto" /></td>
                   </tr>
                 ))
               ) : colaboradores.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-neutral-450 text-xs">
+                  <td colSpan={9} className="p-12 text-center text-neutral-450 text-xs">
                     Nenhum colaborador demitido localizado com os filtros atuais.
                   </td>
                 </tr>
@@ -1141,6 +1405,18 @@ export default function Turnover() {
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 dark:bg-neutral-850 text-neutral-600 dark:text-neutral-350 border border-neutral-200/55 dark:border-neutral-800/80">
                         {colab.motivo_demissao || 'Não Informado'}
                       </span>
+                    </td>
+                    <td className="p-4 text-right font-medium text-neutral-600 dark:text-neutral-400">
+                      {colab.salario_rescisao ? formatMoeda(colab.salario_rescisao) : '-'}
+                    </td>
+                    <td className="p-4 text-right">
+                      {colab.valor_rescisao_estimado && Number(colab.valor_rescisao_estimado) > 0 ? (
+                        <span className="font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
+                          {formatMoeda(colab.valor_rescisao_estimado)}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400">-</span>
+                      )}
                     </td>
                   </tr>
                 ))

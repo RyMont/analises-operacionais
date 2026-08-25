@@ -1,5 +1,6 @@
 import csv
 import logging
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Dict, Any, List, Optional
 from colaboradores.models import Colaborador
 
@@ -21,18 +22,32 @@ DICIONARIO_MOTIVOS = {
     "20": "Jurídico",
 }
 
+def parse_decimal_safe(val: Any, default: Decimal = Decimal("0.00")) -> Decimal:
+    """
+    Converte com segurança valores monetários ou numéricos do CSV (ex: '1763,54', '1.763,54', '29.33')
+    para Decimal.
+    """
+    if val is None:
+        return default
+    texto = str(val).strip()
+    if not texto or texto == "-" or texto == "  /  /    ":
+        return default
+    try:
+        if "," in texto and "." in texto:
+            texto = texto.replace(".", "").replace(",", ".")
+        elif "," in texto:
+            texto = texto.replace(",", ".")
+        return Decimal(texto)
+    except (ValueError, InvalidOperation, TypeError):
+        return default
+
+
 def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dict[str, Any]:
     """
-    Processa o upload do arquivo terminos.csv de forma assíncrona.
-    Mapeia os códigos de rescisão e salva no campo motivo_demissao do Colaborador,
+    Processa o upload do arquivo de rescisões (sc569530.csv / terminos.csv / TOTVS SRG) de forma assíncrona.
+    Mapeia os códigos de rescisão e salva no campo motivo_demissao do Colaborador, além de extrair
+    bases salariais, dias de aviso indenizado e férias para estimar o valor financeiro gasto na rescisão,
     gerando relatórios de discrepâncias em comparação com a base atual.
-    
-    Docstring explicativa em português:
-    Este serviço limpa o CSV no formato especial do TOTVS (retirando as aspas externas e
-    desdobrando aspas duplicadas), localiza as colunas necessárias de Matrícula, Tipo de Rescisão,
-    Data de Demissão e Descrição, traduz o código de rescisão usando o dicionário (com fallback para a 
-    descrição do CSV) e atualiza o campo motivo_demissao dos colaboradores. Além disso, audita e retorna
-    colaboradores ativos que aparecem no arquivo de demissões ou vice-versa.
     """
     if not conteudo_csv:
         logger.info("Importação abortada: conteúdo CSV de Turnover vazio.")
@@ -44,12 +59,12 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
         }
 
     if progress_callback:
-        progress_callback(10, "Lendo e limpando arquivo de termos...")
+        progress_callback(10, "Lendo e limpando arquivo de rescisões...")
 
     linhas = conteudo_csv.splitlines()
     inicio = 0
     for i, linha in enumerate(linhas):
-        if linha.strip().startswith('"'):
+        if linha.strip().startswith('"') or "Filial" in linha or "Matricula" in linha:
             inicio = i
             break
 
@@ -91,10 +106,23 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
                 return col
         raise ValueError(f"Coluna '{esperada}' não encontrada no arquivo CSV de turnover.")
 
+    def resolver_coluna_opcional(esperada, disponiveis):
+        for col in disponiveis:
+            if esperada.upper() in col.upper():
+                return col
+        return None
+
     col_re = resolver_coluna("Matricula", colunas)
     col_tipo = resolver_coluna("Tipo Resc.", colunas)
     col_desc = resolver_coluna("Desc.Tp.Resc", colunas)
     col_dt = resolver_coluna("Dt. Demissao", colunas)
+
+    # Colunas financeiras e de parâmetros adicionais do TOTVS SRG
+    col_salario = resolver_coluna_opcional("Salario Mes", colunas)
+    col_aviso_inde = resolver_coluna_opcional("Aviso Inde", colunas)
+    col_fer_ven = resolver_coluna_opcional("Dias Fer.Ven", colunas)
+    col_fer_pro = resolver_coluna_opcional("Dias Fer.Pro", colunas)
+    col_fer_avi = resolver_coluna_opcional("Dias Fer Avi", colunas)
 
     if progress_callback:
         progress_callback(30, "Carregando base de colaboradores ativos e demitidos...")
@@ -109,7 +137,7 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
     total_linhas = len(registros) - 1
 
     if progress_callback:
-        progress_callback(40, "Processando linhas do CSV...")
+        progress_callback(40, "Processando linhas do CSV e calculando valores de rescisão...")
 
     for idx in range(1, len(registros)):
         row_reader = csv.reader([registros[idx]], delimiter=",", quotechar='"')
@@ -137,10 +165,48 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
         # Traduz o código de rescisão (01, 02) para descrição amigável, usando a descrição original do CSV como fallback
         motivo = DICIONARIO_MOTIVOS.get(tipo_resc_cod, desc_original or "Demitido")
 
+        # Extrai bases financeiras se presentes
+        salario_val = parse_decimal_safe(linha_dict.get(col_salario)) if col_salario else None
+        aviso_inde_dias = parse_decimal_safe(linha_dict.get(col_aviso_inde)) if col_aviso_inde else Decimal("0.00")
+        fer_ven_dias = parse_decimal_safe(linha_dict.get(col_fer_ven)) if col_fer_ven else Decimal("0.00")
+        fer_pro_dias = parse_decimal_safe(linha_dict.get(col_fer_pro)) if col_fer_pro else Decimal("0.00")
+        fer_avi_dias = parse_decimal_safe(linha_dict.get(col_fer_avi)) if col_fer_avi else Decimal("0.00")
+
+        # Cálculo do valor de rescisão estimado:
+        # Aviso Indenizado = (Salário / 30) * Dias Aviso Indenizado
+        # Férias Indenizadas (Vencidas + Proporcionais + Aviso) com 1/3 = Dias Férias * (Salário / 30) * 1.3333333333
+        valor_rescisao_estimado = Decimal("0.00")
+        if salario_val and salario_val > 0:
+            salario_dia = salario_val / Decimal("30.0")
+            valor_aviso = salario_dia * max(Decimal("0.00"), aviso_inde_dias)
+            total_dias_ferias = max(Decimal("0.00"), fer_ven_dias) + max(Decimal("0.00"), fer_pro_dias) + max(Decimal("0.00"), fer_avi_dias)
+            valor_ferias = (total_dias_ferias * salario_dia * (Decimal("4.0") / Decimal("3.0")))
+            valor_rescisao_estimado = (valor_aviso + valor_ferias).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            
+            # Se não houver férias nem aviso indenizado (ex: rescisão imediata ou pedido), o impacto financeiro base é o salário proporcional/nominal
+            if valor_rescisao_estimado == Decimal("0.00"):
+                valor_rescisao_estimado = salario_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
         colaborador = colaboradores_existentes.get(re_valor)
         if colaborador:
+            alterado = False
             if colaborador.motivo_demissao != motivo:
                 colaborador.motivo_demissao = motivo
+                alterado = True
+
+            if salario_val is not None and (
+                colaborador.salario_rescisao != salario_val
+                or colaborador.valor_rescisao_estimado != valor_rescisao_estimado
+            ):
+                colaborador.salario_rescisao = salario_val
+                colaborador.aviso_indenizado_dias = aviso_inde_dias
+                colaborador.ferias_vencidas_dias = fer_ven_dias
+                colaborador.ferias_proporcionais_dias = fer_pro_dias
+                colaborador.ferias_aviso_dias = fer_avi_dias
+                colaborador.valor_rescisao_estimado = valor_rescisao_estimado
+                alterado = True
+
+            if alterado:
                 para_atualizar.append(colaborador)
 
             # Se consta no CSV de demissões mas no sistema está Ativo/Férias (qualquer coisa diferente de 'D')
@@ -184,12 +250,24 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
             })
 
     if progress_callback:
-        progress_callback(90, "Salvando dados de desligamento no banco...")
+        progress_callback(90, "Salvando dados e valores de desligamento no banco...")
 
     if para_atualizar:
         from django.db import transaction
         with transaction.atomic():
-            Colaborador.objects.bulk_update(para_atualizar, ["motivo_demissao"], batch_size=4000)
+            Colaborador.objects.bulk_update(
+                para_atualizar,
+                [
+                    "motivo_demissao",
+                    "salario_rescisao",
+                    "aviso_indenizado_dias",
+                    "ferias_vencidas_dias",
+                    "ferias_proporcionais_dias",
+                    "ferias_aviso_dias",
+                    "valor_rescisao_estimado",
+                ],
+                batch_size=4000
+            )
 
     if progress_callback:
         progress_callback(100, "Importação concluída com sucesso!")
@@ -200,3 +278,4 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
         "descrepancias_csv_para_sistema": descrepancias_csv_para_sistema,
         "descrepancias_sistema_para_csv": descrepancias_sistema_para_csv
     }
+

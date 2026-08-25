@@ -436,3 +436,54 @@ def cargos_unicos_list(request):
         )
     )
     return Response(cargos_limpos)
+
+
+@api_view(["PATCH", "POST"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def teste_alterar_data_inicio(request, pk):
+    """
+    Altera a data de início de um teste de promoção.
+    
+    Por que existe: Permite corrigir erros de digitação ou reagendamentos de início
+    do período de teste, recalculando o ciclo e registrando a alteração na linha do tempo.
+    """
+    teste = get_object_or_404(TestePromocao, id=pk)
+    nova_data_str = request.data.get("data_inicio")
+    motivo = request.data.get("motivo", "").strip()
+
+    if not nova_data_str:
+        return Response(
+            {"error": "O campo data de início é obrigatório."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        nova_data = datetime.strptime(nova_data_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"error": "Formato de data inválido. Use o formato AAAA-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    data_anterior = teste.data_inicio
+    teste.data_inicio = nova_data
+    teste.save()
+
+    # Registra no histórico a alteração da data
+    data_ant_fmt = data_anterior.strftime("%d/%m/%Y")
+    data_nova_fmt = nova_data.strftime("%d/%m/%Y")
+    obs = f"Data de início alterada de {data_ant_fmt} para {data_nova_fmt}."
+    if motivo:
+        obs += f" Motivo: {motivo}"
+
+    HistoricoAcaoTeste.objects.create(
+        teste=teste,
+        acao="alterar_data_inicio",
+        mes_referencia=0,
+        observacao=obs,
+        solicitado_por="Gestão",
+        realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
+        data_acao=date.today(),
+    )
+
+    return Response(TestePromocaoSerializer(teste).data, status=status.HTTP_200_OK)

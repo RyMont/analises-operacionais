@@ -29,6 +29,12 @@ class Colaborador(models.Model):
     data_demissao = models.DateField("Data de Demissão", null=True, blank=True)
     # Por que existe: Registra o motivo amigável do desligamento mapeado do CSV de termos para cálculo de Turnover.
     motivo_demissao = models.CharField("Motivo de Demissão", max_length=100, null=True, blank=True, db_index=True)
+    salario_rescisao = models.DecimalField("Salário na Rescisão", max_digits=12, decimal_places=2, null=True, blank=True)
+    aviso_indenizado_dias = models.DecimalField("Dias Aviso Indenizado", max_digits=6, decimal_places=2, null=True, blank=True, default=0)
+    ferias_vencidas_dias = models.DecimalField("Dias Férias Vencidas", max_digits=6, decimal_places=2, null=True, blank=True, default=0)
+    ferias_proporcionais_dias = models.DecimalField("Dias Férias Proporcionais", max_digits=6, decimal_places=2, null=True, blank=True, default=0)
+    ferias_aviso_dias = models.DecimalField("Dias Férias Aviso", max_digits=6, decimal_places=2, null=True, blank=True, default=0)
+    valor_rescisao_estimado = models.DecimalField("Valor Estimado Rescisão", max_digits=12, decimal_places=2, null=True, blank=True, default=0)
     status = models.CharField("Status", max_length=100, db_index=True)
     cargo = models.CharField("Cargo", max_length=150, db_index=True)
     cpf = models.CharField("CPF", max_length=14, null=True, blank=True)
@@ -246,6 +252,7 @@ class HistoricoAcaoTeste(models.Model):
         ("promover", "Promover"),
         ("cancelar", "Cancelar"),
         ("pagar_premio_cancelar", "Pagar Prêmio e Cancelar"),
+        ("alterar_data_inicio", "Alteração de Data de Início"),
     ]
 
     teste = models.ForeignKey(

@@ -201,16 +201,16 @@ def turnover_import_async(request):
             user_id=request.user.id,
             content_type_id=ContentType.objects.get_for_model(Colaborador).pk,
             object_id=0,
-            object_repr="Importação de Turnover (Termos)",
+            object_repr="Importação de Rescisões / Turnover (SRG)",
             action_flag=CHANGE,
-            change_message=f"Iniciou a importação do arquivo de termos: {arquivo.name}"
+            change_message=f"Iniciou a importação do arquivo de rescisões (SRG): {arquivo.name}"
         )
 
     return _iniciar_importacao_async(
         tipo_importacao="turnover",
         payload={"conteudo": conteudo},
-        titulo="Progresso da Importação de Turnover",
-        mensagem_inicial="Iniciando processamento do arquivo de termos de rescisão...",
+        titulo="Progresso da Importação de Rescisões (SRG)",
+        mensagem_inicial="Iniciando processamento do arquivo de rescisões e cálculos de verbas...",
     )
 
 @api_view(["POST"])
@@ -550,15 +550,15 @@ def _processar_importacao_background(import_id, tipo_importacao):
 def _montar_mensagem_turnover(resultado):
     total = resultado.get("total", 0)
     if total == 0:
-        return "Nenhum termo de rescisão encontrado no arquivo. Verifique o formato.", "warning"
+        return "Nenhum registro de rescisão (SRG) encontrado no arquivo. Verifique o formato.", "warning"
 
     atualizados = resultado.get("atualizados", 0)
     desc_csv_sistema = len(resultado.get("descrepancias_csv_para_sistema", []))
     desc_sistema_csv = len(resultado.get("descrepancias_sistema_para_csv", []))
 
     mensagem = (
-        f"Importação de Turnover concluída: {total} registros processados. "
-        f"{atualizados} colaborador(es) atualizado(s) com o motivo de desligamento."
+        f"Importação de Rescisões (SRG) concluída: {total} registros processados. "
+        f"{atualizados} colaborador(es) atualizado(s) com motivos e cálculos rescisórios."
     )
     
     tem_alerta = desc_csv_sistema > 0 or desc_sistema_csv > 0

@@ -285,8 +285,8 @@ export default function Importacoes() {
 
         {permissions?.turnover?.create && (
           <UploadCard
-            title="Motivos de Demissão (Turnover)"
-            description="Carga dos motivos de demissão da equipe. Formato aceito: CSV de desligamentos (terminos.csv)."
+            title="Rescisões / Turnover (TOTVS - SRG)"
+            description="Carga de rescisões, motivos e verbas indenizadas. Formato aceito: CSV da tabela SRG (sc569530.csv / rescisões)."
             icon={
               <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500">
                 <TrendingDown className="h-6 w-6" />
@@ -296,7 +296,7 @@ export default function Importacoes() {
             file={turnoverFile}
             setFile={setTurnoverFile}
             loading={loading}
-            buttonText="Importar Turnover"
+            buttonText="Importar Rescisões (SRG)"
             onUpload={() => handleUpload('turnover', turnoverFile)}
           />
         )}

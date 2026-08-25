@@ -7,23 +7,25 @@ import {
   Calendar, 
   Clock, 
   CheckCircle2, 
-  XCircle,
-  Play,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  UserCheck
+  XCircle, 
+  Play, 
+  Settings, 
+  ChevronLeft, 
+  ChevronRight, 
+  UserCheck,
+  CalendarDays
 } from 'lucide-react';
 import api, { getBackendPort } from '../api/client';
 import { toast } from 'sonner';
 import { formatDate, obterInfoFolhas, obterFolhaCalendarioReal, converterFolhaParaNumero } from '../utils/formatters';
 import NovoTesteModal from '../components/Testes/NovoTesteModal';
 import AcaoTesteModal from '../components/Testes/AcaoTesteModal';
+import AlterarDataInicioModal from '../components/Testes/AlterarDataInicioModal';
 import SearchableSelect from '../components/ui/searchable-select';
 
 export interface HistoricoAcao {
   id: string;
-  acao: 'ativar' | 'pagar_premio' | 'promover' | 'cancelar' | 'registrar_resposta' | 'pagar_premio_cancelar';
+  acao: 'ativar' | 'pagar_premio' | 'promover' | 'cancelar' | 'registrar_resposta' | 'pagar_premio_cancelar' | 'alterar_data_inicio';
   acao_display: string;
   mes_referencia: number;
   observacao: string;
@@ -97,6 +99,7 @@ export default function TestesPromocao() {
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [showAcaoModal, setShowAcaoModal] = useState(false);
   const [selectedTeste, setSelectedTeste] = useState<TestePromocaoItem | null>(null);
+  const [testeParaAlterarData, setTesteParaAlterarData] = useState<TestePromocaoItem | null>(null);
 
   // Por que existe: Carrega a lista completa de testes da API quando o componente é montado
   // ou quando uma nova ação/cadastro é finalizado (disparando fetchTrigger).
@@ -584,9 +587,22 @@ export default function TestesPromocao() {
 
                     {/* Data de Início */}
                     <td className="py-4 px-6 text-neutral-600 dark:text-neutral-300">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-4 w-4 text-neutral-400" />
-                        {formatDate(teste.data_inicio)}
+                      <div className="flex items-center justify-between gap-2 group">
+                        <div className="flex items-center gap-1.5 font-medium text-neutral-800 dark:text-neutral-200">
+                          <Calendar className="h-4 w-4 text-neutral-400 shrink-0" />
+                          <span>{formatDate(teste.data_inicio)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTesteParaAlterarData(teste);
+                          }}
+                          title="Alterar Data de Início"
+                          className="p-1 rounded-md border border-neutral-200/80 dark:border-neutral-800 hover:bg-amber-500/10 hover:border-amber-500/30 text-neutral-400 hover:text-amber-600 dark:hover:text-amber-400 opacity-60 group-hover:opacity-100 transition-all cursor-pointer"
+                        >
+                          <CalendarDays className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </td>
 
@@ -759,6 +775,17 @@ export default function TestesPromocao() {
           teste={selectedTeste}
           onClose={() => setShowAcaoModal(false)}
           onSaveSuccess={handleSaveSuccess}
+        />
+      )}
+
+      {/* Modal - Alterar Data de Início */}
+      {testeParaAlterarData && (
+        <AlterarDataInicioModal
+          teste={testeParaAlterarData}
+          onClose={() => setTesteParaAlterarData(null)}
+          onSaveSuccess={() => {
+            handleSaveSuccess();
+          }}
         />
       )}
     </div>

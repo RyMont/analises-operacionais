@@ -169,10 +169,15 @@ def turnover_list_api(request):
             if search_query_lower in c.nome.lower() or search_query_lower in c.re.lower()
         ]
 
-    # Totais consolidados
+    # Totais consolidados quantitativos e financeiros
     total_demissoes = len(demitidos_filtrados)
     total_admitidos = len(admitidos_no_periodo)
     saldo = total_admitidos - total_demissoes
+
+    total_custo_rescisao = sum(float(c.valor_rescisao_estimado or 0) for c in demitidos_filtrados)
+    total_massa_salarial = sum(float(c.salario_rescisao or 0) for c in demitidos_filtrados)
+    media_custo_rescisao = (total_custo_rescisao / total_demissoes) if total_demissoes > 0 else 0.0
+    media_salario_demissao = (total_massa_salarial / total_demissoes) if total_demissoes > 0 else 0.0
 
     # Cálculo da soma de quadros das lojas filtradas/em análise
     soma_quadros = sum(obter_quadro_valor(l) for l in lojas_filtradas_por_analise)
@@ -180,33 +185,61 @@ def turnover_list_api(request):
     # Cálculo da Taxa de Turnover Global sobre a soma dos quadros das lojas em análise
     taxa_turnover = (total_demissoes / soma_quadros * 100.0) if soma_quadros > 0 else 0.0
 
-    # Agregações para gráficos de demissões
+    # Agregações para gráficos de demissões (Quantidade e Valores)
     m_dict = {}
     for c in demitidos_filtrados:
         motivo = c.motivo_demissao or "Não Informado"
-        m_dict[motivo] = m_dict.get(motivo, 0) + 1
+        if motivo not in m_dict:
+            m_dict[motivo] = {"quantidade": 0, "valor_total": 0.0, "massa_salarial": 0.0}
+        m_dict[motivo]["quantidade"] += 1
+        m_dict[motivo]["valor_total"] += float(c.valor_rescisao_estimado or 0)
+        m_dict[motivo]["massa_salarial"] += float(c.salario_rescisao or 0)
+
     dados_grafico_motivo = sorted(
-        [{"motivo": m, "quantidade": q} for m, q in m_dict.items()],
+        [
+            {
+                "motivo": m,
+                "quantidade": d["quantidade"],
+                "valor_total": round(d["valor_total"], 2),
+                "massa_salarial": round(d["massa_salarial"], 2),
+                "ticket_medio": round(d["valor_total"] / d["quantidade"], 2) if d["quantidade"] > 0 else 0.0,
+            }
+            for m, d in m_dict.items()
+        ],
         key=lambda x: x["quantidade"],
         reverse=True
     )
 
-    # Evolução Mensal (Comparativo Admitidos vs Demitidos)
+    # Evolução Mensal (Comparativo Admitidos vs Demitidos e Custos)
     mensal_dict = {}
     for c in demitidos_filtrados:
         if c.data_demissao:
             key = c.data_demissao.strftime("%Y-%m")
             label = c.data_demissao.strftime("%m/%Y")
             if key not in mensal_dict:
-                mensal_dict[key] = {"label": label, "admissoes": 0, "demissoes": 0}
+                mensal_dict[key] = {
+                    "label": label,
+                    "admissoes": 0,
+                    "demissoes": 0,
+                    "valor_rescisao": 0.0,
+                    "massa_salarial": 0.0,
+                }
             mensal_dict[key]["demissoes"] += 1
+            mensal_dict[key]["valor_rescisao"] += float(c.valor_rescisao_estimado or 0)
+            mensal_dict[key]["massa_salarial"] += float(c.salario_rescisao or 0)
 
     for c in admitidos_no_periodo:
         if c.data_admissao:
             key = c.data_admissao.strftime("%Y-%m")
             label = c.data_admissao.strftime("%m/%Y")
             if key not in mensal_dict:
-                mensal_dict[key] = {"label": label, "admissoes": 0, "demissoes": 0}
+                mensal_dict[key] = {
+                    "label": label,
+                    "admissoes": 0,
+                    "demissoes": 0,
+                    "valor_rescisao": 0.0,
+                    "massa_salarial": 0.0,
+                }
             mensal_dict[key]["admissoes"] += 1
 
     if meses_anos:
@@ -216,40 +249,48 @@ def turnover_list_api(request):
         {
             "mes": v["label"],
             "admissoes": v["admissoes"],
-            "demissoes": v["demissoes"]
+            "demissoes": v["demissoes"],
+            "valor_rescisao": round(v.get("valor_rescisao", 0.0), 2),
+            "massa_salarial": round(v.get("massa_salarial", 0.0), 2),
         }
         for k, v in sorted(mensal_dict.items())
     ]
 
-    # Distribuição de Coordenador (Taxa de Turnover baseada na soma dos quadros)
+    # Distribuição de Coordenador (Taxa de Turnover e Custos)
     coord_stats = {}
     for l in lojas_all:
         coord_nome = l.coordenador.nome if l.coordenador else "Sem Coordenador"
         if coord_nome not in coord_stats:
-            coord_stats[coord_nome] = {"quadro": 0, "demissoes": 0}
+            coord_stats[coord_nome] = {"quadro": 0, "demissoes": 0, "valor_rescisao": 0.0, "massa_salarial": 0.0}
         coord_stats[coord_nome]["quadro"] += obter_quadro_valor(l)
 
     for c in demitidos_filtrados:
         coord_nome = c.loja_resolvida.coordenador.nome if (c.loja_resolvida and c.loja_resolvida.coordenador) else "Sem Coordenador"
         if coord_nome not in coord_stats:
-            coord_stats[coord_nome] = {"quadro": 0, "demissoes": 0}
+            coord_stats[coord_nome] = {"quadro": 0, "demissoes": 0, "valor_rescisao": 0.0, "massa_salarial": 0.0}
         coord_stats[coord_nome]["demissoes"] += 1
+        coord_stats[coord_nome]["valor_rescisao"] += float(c.valor_rescisao_estimado or 0)
+        coord_stats[coord_nome]["massa_salarial"] += float(c.salario_rescisao or 0)
 
     dados_grafico_coordenador = []
     for coord, stats in coord_stats.items():
         dem = stats["demissoes"]
         quad = stats["quadro"]
         taxa = (dem / quad * 100.0) if quad > 0 else 0.0
+        val_res = round(stats["valor_rescisao"], 2)
         if dem > 0:
             dados_grafico_coordenador.append({
                 "coordenador": coord,
                 "quantidade": round(taxa, 1),
+                "taxa_turnover": round(taxa, 1),
                 "quadro": quad,
-                "demissoes": dem
+                "demissoes": dem,
+                "valor_total": val_res,
+                "massa_salarial": round(stats["massa_salarial"], 2),
             })
     dados_grafico_coordenador = sorted(dados_grafico_coordenador, key=lambda x: x["quantidade"], reverse=True)
 
-    # Estatísticas de Todas as Lojas por Taxa de Turnover (Demissões / Quadro da Loja)
+    # Estatísticas de Todas as Lojas por Taxa de Turnover e Custo
     lojas_stats = {}
     for l in lojas_all:
         lojas_stats[l.nome_referencia] = {
@@ -258,6 +299,8 @@ def turnover_list_api(request):
             "quadro": obter_quadro_valor(l),
             "demissoes": 0,
             "admissoes": 0,
+            "valor_rescisao": 0.0,
+            "massa_salarial": 0.0,
             "coordenador": l.coordenador.nome if l.coordenador else "Sem Coordenador",
             "supervisor": l.supervisor.nome if l.supervisor else "Sem Supervisor",
             "uf": l.uf or "N/A",
@@ -273,11 +316,15 @@ def turnover_list_api(request):
                     "quadro": obter_quadro_valor(c.loja_resolvida),
                     "demissoes": 0,
                     "admissoes": 0,
+                    "valor_rescisao": 0.0,
+                    "massa_salarial": 0.0,
                     "coordenador": c.loja_resolvida.coordenador.nome if c.loja_resolvida.coordenador else "Sem Coordenador",
                     "supervisor": c.loja_resolvida.supervisor.nome if c.loja_resolvida.supervisor else "Sem Supervisor",
                     "uf": c.loja_resolvida.uf or "N/A",
                 }
             lojas_stats[loja_nome]["demissoes"] += 1
+            lojas_stats[loja_nome]["valor_rescisao"] += float(c.valor_rescisao_estimado or 0)
+            lojas_stats[loja_nome]["massa_salarial"] += float(c.salario_rescisao or 0)
 
     for c in admitidos_no_periodo:
         if c.loja_resolvida:
@@ -291,6 +338,8 @@ def turnover_list_api(request):
         quad = stats["quadro"]
         adm = stats.get("admissoes", 0)
         taxa = (dem / quad * 100.0) if quad > 0 else 0.0
+        val_res = round(stats.get("valor_rescisao", 0.0), 2)
+        val_sal = round(stats.get("massa_salarial", 0.0), 2)
         dados_grafico_lojas.append({
             "id": stats.get("id"),
             "loja": loja_nome,
@@ -301,7 +350,9 @@ def turnover_list_api(request):
             "taxa_turnover": round(taxa, 1),
             "quadro": quad,
             "demissoes": dem,
-            "admissoes": adm
+            "admissoes": adm,
+            "valor_rescisao": val_res,
+            "massa_salarial": val_sal,
         })
     dados_grafico_lojas = sorted(
         dados_grafico_lojas,
@@ -309,13 +360,26 @@ def turnover_list_api(request):
         reverse=True
     )
 
-    # Distribuição de demitidos por Cargo
+    # Distribuição de demitidos por Cargo (Quantidade e Valores)
     cargo_dict = {}
     for c in demitidos_filtrados:
         cargo = c.cargo or "Outros"
-        cargo_dict[cargo] = cargo_dict.get(cargo, 0) + 1
+        if cargo not in cargo_dict:
+            cargo_dict[cargo] = {"quantidade": 0, "valor_total": 0.0, "massa_salarial": 0.0}
+        cargo_dict[cargo]["quantidade"] += 1
+        cargo_dict[cargo]["valor_total"] += float(c.valor_rescisao_estimado or 0)
+        cargo_dict[cargo]["massa_salarial"] += float(c.salario_rescisao or 0)
+
     dados_grafico_cargos = sorted(
-        [{"cargo": cg, "quantidade": q} for cg, q in cargo_dict.items()],
+        [
+            {
+                "cargo": cg,
+                "quantidade": d["quantidade"],
+                "valor_total": round(d["valor_total"], 2),
+                "massa_salarial": round(d["massa_salarial"], 2),
+            }
+            for cg, d in cargo_dict.items()
+        ],
         key=lambda x: x["quantidade"],
         reverse=True
     )[:10]
@@ -343,6 +407,10 @@ def turnover_list_api(request):
             "total_ativos": total_ativos,
             "taxa_turnover": round(taxa_turnover, 2),
             "saldo": saldo,
+            "total_custo_rescisao": round(total_custo_rescisao, 2),
+            "total_massa_salarial_demitida": round(total_massa_salarial, 2),
+            "media_custo_rescisao": round(media_custo_rescisao, 2),
+            "media_salario_demissao": round(media_salario_demissao, 2),
             "graficos": {
                 "motivo": dados_grafico_motivo,
                 "mensal": dados_grafico_linha,

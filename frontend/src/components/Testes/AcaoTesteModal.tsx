@@ -12,7 +12,8 @@ import {
   Play,
   CheckCircle2,
   XCircle,
-  Edit
+  Edit,
+  CalendarDays
 } from 'lucide-react';
 import api from '../../api/client';
 import { toast } from 'sonner';
@@ -20,6 +21,7 @@ import { formatDate, obterInfoFolhas } from '../../utils/formatters';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import type { TestePromocaoItem } from '../../pages/TestesPromocao';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside';
+import AlterarDataInicioModal from './AlterarDataInicioModal';
 
 interface AcaoTesteModalProps {
   teste: TestePromocaoItem;
@@ -42,7 +44,13 @@ interface AusenciasInfo {
  */
 export default function AcaoTesteModal({ teste, onClose, onSaveSuccess }: AcaoTesteModalProps) {
   const [activeTab, setActiveTab] = useState<'controle' | 'ausencias' | 'historico'>('controle');
+  const [testeAtual, setTesteAtual] = useState<TestePromocaoItem>(teste);
+  const [showAlterarDataModal, setShowAlterarDataModal] = useState(false);
   
+  useEffect(() => {
+    setTesteAtual(teste);
+  }, [teste]);
+
   // Ausências (GeoVictoria)
   const [ausencias, setAusencias] = useState<AusenciasInfo | null>(null);
   const [loadingAusencias, setLoadingAusencias] = useState(false);
@@ -136,13 +144,13 @@ export default function AcaoTesteModal({ teste, onClose, onSaveSuccess }: AcaoTe
     const atestadosCount = dadosAusencias.atestados;
 
     const texto = `Solicitação de Teste de Promoção:
-- Colaborador: ${teste.colaborador_nome} (RE ${teste.colaborador_re})
-- Cargo Atual: ${teste.colaborador_cargo}
-- Cargo em Teste: ${teste.cargo_teste || '-'}
-- Loja: ${teste.loja_nome}
-- Supervisão: ${teste.supervisor_nome}
-- Admissão: ${formatDate(teste.colaborador_admissao)}
-- Início do Teste: ${formatDate(teste.data_inicio)}
+- Colaborador: ${testeAtual.colaborador_nome} (RE ${testeAtual.colaborador_re})
+- Cargo Atual: ${testeAtual.colaborador_cargo}
+- Cargo em Teste: ${testeAtual.cargo_teste || '-'}
+- Loja: ${testeAtual.loja_nome}
+- Supervisão: ${testeAtual.supervisor_nome}
+- Admissão: ${formatDate(testeAtual.colaborador_admissao)}
+- Início do Teste: ${formatDate(testeAtual.data_inicio)}
 - Ausências (último ano): ${faltasCount} faltas e ${atestadosCount} atestados.
 
 Por favor, verifique se aprova o início do teste de promoção para este colaborador.`;
@@ -159,30 +167,30 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
 
   // Determinar o mês atual do teste
   const getMesAtualNum = () => {
-    const premios = teste.historico_acoes.filter(a => a.acao === 'pagar_premio' || a.acao === 'pagar_premio_cancelar').length;
+    const premios = testeAtual.historico_acoes.filter(a => a.acao === 'pagar_premio' || a.acao === 'pagar_premio_cancelar').length;
     return premios + 1;
   };
 
   const mesAtual = getMesAtualNum();
 
   // Verifica se já existe resposta do supervisor registrada para o mês atual
-  const respostaSupervisorReg = teste.historico_acoes.find(
+  const respostaSupervisorReg = testeAtual.historico_acoes.find(
     a => a.acao === 'registrar_resposta' && a.mes_referencia === mesAtual
   );
 
   // Por que existe: Pré-seleciona a opção de Pagar Prêmio como padrão no primeiro mês de teste,
   // permitindo que o supervisor decida alternar para Pagar Prêmio e Cancelar caso necessário.
   useEffect(() => {
-    if (teste.status === 'ativo' && !respostaSupervisorReg && mesAtual === 1) {
+    if (testeAtual.status === 'ativo' && !respostaSupervisorReg && mesAtual === 1) {
       setRespostaSupervisor('pagar_premio');
     }
-  }, [teste.id, mesAtual, respostaSupervisorReg]);
+  }, [testeAtual.id, mesAtual, respostaSupervisorReg]);
 
   // Por que existe: Garante que o estado de edição da resposta seja reiniciado
   // quando o usuário alternar entre diferentes testes no modal.
   useEffect(() => {
     setEditandoResposta(false);
-  }, [teste.id]);
+  }, [testeAtual.id]);
 
   const iniciarEdicao = () => {
     if (respostaSupervisorReg) {
@@ -215,7 +223,7 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
 
     setExecuting(true);
     try {
-      await api.post(`/colaboradores/testes/${teste.id}/registrar-acao/`, {
+      await api.post(`/colaboradores/testes/${testeAtual.id}/registrar-acao/`, {
         acao: 'registrar_resposta',
         resposta_supervisor: decisao,
         observacao,
@@ -240,7 +248,7 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
 
     setExecuting(true);
     try {
-      await api.post(`/colaboradores/testes/${teste.id}/registrar-acao/`, {
+      await api.post(`/colaboradores/testes/${testeAtual.id}/registrar-acao/`, {
         acao: respostaSupervisorReg.resposta_supervisor,
         observacao: observacao.trim() || `Ação de ${respostaSupervisorReg.resposta_supervisor === 'pagar_premio' ? 'Pagar Prêmio' : respostaSupervisorReg.resposta_supervisor === 'promover' ? 'Promoção' : 'Cancelamento'} confirmada.`,
       });
@@ -257,12 +265,12 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
   };
 
   // Calcula as informações das folhas para os 4 meses de teste
-  const folhas = obterInfoFolhas(teste.data_inicio);
+  const folhas = obterInfoFolhas(testeAtual.data_inicio);
   const folhaAtual = folhas.find(f => f.mesRef === mesAtual);
 
   // Mapeia o status de cada mês baseado no histórico de ações do colaborador
   const obterStatusMes = (mesNum: number) => {
-    const acoesMes = teste.historico_acoes.filter(a => a.mes_referencia === mesNum);
+    const acoesMes = testeAtual.historico_acoes.filter(a => a.mes_referencia === mesNum);
     const acaoFinal = acoesMes.find(a => ['pagar_premio', 'promover', 'cancelar', 'pagar_premio_cancelar'].includes(a.acao));
     const acaoResposta = acoesMes.find(a => a.acao === 'registrar_resposta');
 
@@ -432,7 +440,17 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
                 </div>
                 <div>
                   <span className="block text-[10px] font-bold text-neutral-450 uppercase tracking-wider">Data de Início</span>
-                  <span className="text-sm font-semibold text-neutral-850 dark:text-neutral-200">{formatDate(teste.data_inicio)}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-sm font-semibold text-neutral-850 dark:text-neutral-200">{formatDate(testeAtual.data_inicio)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAlterarDataModal(true)}
+                      title="Alterar Data de Início"
+                      className="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <span className="block text-[10px] font-bold text-neutral-450 uppercase tracking-wider">Admissão</span>
@@ -918,11 +936,12 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
                   </div>
                 </div>
 
-                {teste.historico_acoes.map((item) => (
+                {testeAtual.historico_acoes.map((item) => (
                   <div key={item.id} className="relative">
                     {/* Marcador na linha */}
                     <span className={`absolute -left-[31px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border bg-white dark:bg-neutral-900 ${
                       item.acao === 'ativar' ? 'border-blue-500 text-blue-500' :
+                      item.acao === 'alterar_data_inicio' ? 'border-amber-500 text-amber-500' :
                       item.acao === 'pagar_premio' ? 'border-amber-500 text-amber-500' :
                       item.acao === 'promover' ? 'border-green-600 text-green-600' :
                       item.acao === 'pagar_premio_cancelar' ? 'border-rose-500 text-rose-500' :
@@ -967,6 +986,20 @@ Por favor, verifique se aprova o início do teste de promoção para este colabo
           </button>
         </div>
       </div>
+
+      {/* Modal - Alterar Data de Início */}
+      {showAlterarDataModal && (
+        <AlterarDataInicioModal
+          teste={testeAtual}
+          onClose={() => setShowAlterarDataModal(false)}
+          onSaveSuccess={(updated) => {
+            if (updated) {
+              setTesteAtual(updated);
+            }
+            onSaveSuccess();
+          }}
+        />
+      )}
     </div>
   );
 }
