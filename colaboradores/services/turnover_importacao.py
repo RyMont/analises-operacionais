@@ -1,4 +1,5 @@
 import csv
+import io
 import logging
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Dict, Any, List, Optional
@@ -44,7 +45,7 @@ def parse_decimal_safe(val: Any, default: Decimal = Decimal("0.00")) -> Decimal:
 
 def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dict[str, Any]:
     """
-    Processa o upload do arquivo de rescisões (sc569530.csv / terminos.csv / TOTVS SRG) de forma assíncrona.
+    Processa o upload do arquivo de rescisões (sc569530.csv / sc575190.csv / terminos.csv / TOTVS SRG) de forma assíncrona.
     Mapeia os códigos de rescisão e salva no campo motivo_demissao do Colaborador, além de extrair
     bases salariais, dias de aviso indenizado e férias para estimar o valor financeiro gasto na rescisão,
     gerando relatórios de discrepâncias em comparação com a base atual.
@@ -64,23 +65,13 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
     linhas = conteudo_csv.splitlines()
     inicio = 0
     for i, linha in enumerate(linhas):
-        if linha.strip().startswith('"') or "Filial" in linha or "Matricula" in linha:
+        linha_strip = linha.strip()
+        if "Filial" in linha_strip or "Matricula" in linha_strip:
             inicio = i
             break
 
-    linhas_dados = linhas[inicio:]
-    registros = []
-
-    for linha in linhas_dados:
-        linha_limpa = linha.strip()
-        if not linha_limpa:
-            continue
-        if linha_limpa.startswith('"') and linha_limpa.endswith('"'):
-            linha_limpa = linha_limpa[1:-1]
-        linha_limpa = linha_limpa.replace('""', '"')
-        registros.append(linha_limpa)
-
-    if not registros:
+    linhas_dados = [l for l in linhas[inicio:] if l.strip()]
+    if not linhas_dados:
         logger.warning("Nenhum registro extraído do arquivo.")
         return {
             "total": 0,
@@ -92,14 +83,12 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
     if progress_callback:
         progress_callback(20, "Mapeando colunas e cabeçalho...")
 
-    header_reader = csv.reader([registros[0]], delimiter=",", quotechar='"')
+    reader = csv.reader(io.StringIO("\n".join(linhas_dados)), delimiter=",", quotechar='"')
     try:
-        colunas = next(header_reader)
+        colunas = [c.strip() for c in next(reader) if c.strip()]
     except StopIteration:
         raise ValueError("Cabeçalho do CSV de Turnover está vazio ou é inválido.")
 
-    colunas = [c.strip() for c in colunas if c.strip()]
-    
     def resolver_coluna(esperada, disponiveis):
         for col in disponiveis:
             if esperada.upper() in col.upper():
@@ -134,18 +123,17 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
     descrepancias_csv_para_sistema = []
 
     para_atualizar = []
-    total_linhas = len(registros) - 1
+    total_linhas = len(linhas_dados) - 1
+    total_processados = 0
 
     if progress_callback:
         progress_callback(40, "Processando linhas do CSV e calculando valores de rescisão...")
 
-    for idx in range(1, len(registros)):
-        row_reader = csv.reader([registros[idx]], delimiter=",", quotechar='"')
-        try:
-            valores = next(row_reader)
-        except StopIteration:
+    for idx, valores in enumerate(reader, start=1):
+        if not valores or not any(valores):
             continue
 
+        total_processados += 1
         if len(valores) > len(colunas):
             valores = valores[:len(colunas)]
         elif len(valores) < len(colunas):
@@ -172,21 +160,6 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
         fer_pro_dias = parse_decimal_safe(linha_dict.get(col_fer_pro)) if col_fer_pro else Decimal("0.00")
         fer_avi_dias = parse_decimal_safe(linha_dict.get(col_fer_avi)) if col_fer_avi else Decimal("0.00")
 
-        # Cálculo do valor de rescisão estimado:
-        # Aviso Indenizado = (Salário / 30) * Dias Aviso Indenizado
-        # Férias Indenizadas (Vencidas + Proporcionais + Aviso) com 1/3 = Dias Férias * (Salário / 30) * 1.3333333333
-        valor_rescisao_estimado = Decimal("0.00")
-        if salario_val and salario_val > 0:
-            salario_dia = salario_val / Decimal("30.0")
-            valor_aviso = salario_dia * max(Decimal("0.00"), aviso_inde_dias)
-            total_dias_ferias = max(Decimal("0.00"), fer_ven_dias) + max(Decimal("0.00"), fer_pro_dias) + max(Decimal("0.00"), fer_avi_dias)
-            valor_ferias = (total_dias_ferias * salario_dia * (Decimal("4.0") / Decimal("3.0")))
-            valor_rescisao_estimado = (valor_aviso + valor_ferias).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            
-            # Se não houver férias nem aviso indenizado (ex: rescisão imediata ou pedido), o impacto financeiro base é o salário proporcional/nominal
-            if valor_rescisao_estimado == Decimal("0.00"):
-                valor_rescisao_estimado = salario_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
         colaborador = colaboradores_existentes.get(re_valor)
         if colaborador:
             alterado = False
@@ -196,14 +169,16 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
 
             if salario_val is not None and (
                 colaborador.salario_rescisao != salario_val
-                or colaborador.valor_rescisao_estimado != valor_rescisao_estimado
+                or colaborador.aviso_indenizado_dias != aviso_inde_dias
+                or colaborador.ferias_vencidas_dias != fer_ven_dias
+                or colaborador.ferias_proporcionais_dias != fer_pro_dias
+                or colaborador.ferias_aviso_dias != fer_avi_dias
             ):
                 colaborador.salario_rescisao = salario_val
                 colaborador.aviso_indenizado_dias = aviso_inde_dias
                 colaborador.ferias_vencidas_dias = fer_ven_dias
                 colaborador.ferias_proporcionais_dias = fer_pro_dias
                 colaborador.ferias_aviso_dias = fer_avi_dias
-                colaborador.valor_rescisao_estimado = valor_rescisao_estimado
                 alterado = True
 
             if alterado:
@@ -230,9 +205,9 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
                 "tipo_erro": "Inexistente no Banco"
             })
 
-        if progress_callback and idx % 1000 == 0:
-            progresso = 40 + int((idx / total_linhas) * 45)  # 40% a 85%
-            progress_callback(progresso, f"Processando linhas... ({idx}/{total_linhas})")
+        if progress_callback and total_processados % 1000 == 0:
+            progresso = 40 + int((total_processados / max(1, total_linhas)) * 45)  # 40% a 85%
+            progress_callback(progresso, f"Processando linhas... ({total_processados}/{total_linhas})")
 
     # Discrepâncias: Colaboradores demitidos no sistema que não constam no CSV importado
     descrepancias_sistema_para_csv = []
@@ -250,7 +225,7 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
             })
 
     if progress_callback:
-        progress_callback(90, "Salvando dados e valores de desligamento no banco...")
+        progress_callback(90, "Salvando dados e motivos de desligamento no banco...")
 
     if para_atualizar:
         from django.db import transaction
@@ -264,7 +239,6 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
                     "ferias_vencidas_dias",
                     "ferias_proporcionais_dias",
                     "ferias_aviso_dias",
-                    "valor_rescisao_estimado",
                 ],
                 batch_size=4000
             )
@@ -273,7 +247,7 @@ def importar_turnover_de_texto(conteudo_csv: str, progress_callback=None) -> Dic
         progress_callback(100, "Importação concluída com sucesso!")
 
     return {
-        "total": len(registros) - 1,
+        "total": total_processados,
         "atualizados": len(para_atualizar),
         "descrepancias_csv_para_sistema": descrepancias_csv_para_sistema,
         "descrepancias_sistema_para_csv": descrepancias_sistema_para_csv

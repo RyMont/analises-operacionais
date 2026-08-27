@@ -17,6 +17,28 @@ from lojas.services.diaria_importacao import importar_diarias_de_texto
 from lojas.services.premio_importacao import importar_premios_de_excel
 
 
+def decodificar_arquivo_csv(arquivo) -> str:
+    """
+    Lê com segurança os bytes de um arquivo enviado por upload e decodifica utilizando
+    as codificações mais comuns suportadas pelo TOTVS (UTF-8-SIG, ISO-8859-1, Windows-1252, Latin-1, UTF-8).
+    Garante que o buffer de bytes é lido apenas uma vez na memória, prevenindo ponteiro no final do arquivo (EOF).
+    """
+    if hasattr(arquivo, "read"):
+        raw_bytes = arquivo.read()
+    elif isinstance(arquivo, (bytes, bytearray)):
+        raw_bytes = bytes(arquivo)
+    else:
+        raise ValueError("Arquivo inválido para decodificação.")
+
+    for enc in ("utf-8-sig", "iso-8859-1", "windows-1252", "latin-1", "utf-8"):
+        try:
+            return raw_bytes.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    raise UnicodeDecodeError("utf-8", raw_bytes, 0, 1, "Não foi possível decodificar o arquivo CSV. Formato de codificação não suportado.")
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
 def importacoes(request):
@@ -49,11 +71,11 @@ def colaborador_import_async(request):
         return Response({"success": False, "error": "Envie um arquivo CSV válido."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        conteudo = arquivo.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
+        conteudo = decodificar_arquivo_csv(arquivo)
+    except Exception:
         return Response({
             "success": False,
-            "error": "Não foi possível ler o arquivo. Certifique-se de que é um CSV em UTF-8."
+            "error": "Não foi possível ler o arquivo. Certifique-se de que é um CSV em UTF-8 ou ISO-8859-1."
         }, status=status.HTTP_400_BAD_REQUEST)
 
     if request.user.is_authenticated:
@@ -182,16 +204,12 @@ def turnover_import_async(request):
         return Response({"success": False, "error": "Envie um arquivo CSV de termos válido."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        conteudo = arquivo.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
-        try:
-            # Tenta decodificar como ISO-8859-1 se UTF-8-sig falhar
-            conteudo = arquivo.read().decode("iso-8859-1")
-        except UnicodeDecodeError:
-            return Response({
-                "success": False,
-                "error": "Não foi possível ler o arquivo. Certifique-se de que é um CSV em UTF-8 ou ISO-8859-1."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        conteudo = decodificar_arquivo_csv(arquivo)
+    except Exception:
+        return Response({
+            "success": False,
+            "error": "Não foi possível ler o arquivo. Certifique-se de que é um CSV em UTF-8 ou ISO-8859-1."
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     if request.user.is_authenticated:
         from django.contrib.admin.models import LogEntry, CHANGE
@@ -214,6 +232,56 @@ def turnover_import_async(request):
     )
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def gper020_import_async(request):
+    """
+    Inicia a importação assíncrona dos valores de rescisão (GPER020 XML / Excel).
+    Extrai da Página 2 os valores pagos das rescisões por matrícula.
+    """
+    user = request.user
+    group = user.groups.first()
+    if not user.is_superuser:
+        from usuarios.models import RolePermission
+        from django.db import DatabaseError
+        try:
+            perm = RolePermission.objects.get(group=group, module="turnover")
+            if not perm.can_create:
+                return Response({"success": False, "error": "Você não possui permissão para importar valores de rescisão."}, status=status.HTTP_403_FORBIDDEN)
+        except (RolePermission.DoesNotExist, DatabaseError):
+            return Response({"success": False, "error": "Erro ao validar permissões de turnover."}, status=status.HTTP_403_FORBIDDEN)
+
+    arquivo = request.FILES.get("arquivo")
+    if not arquivo:
+        return Response({"success": False, "error": "Nenhum arquivo enviado."}, status=status.HTTP_400_BAD_REQUEST)
+
+    nome = (arquivo.name or "").lower()
+    if not (nome.endswith(".xml") or nome.endswith(".xlsx") or nome.endswith(".xlsm") or nome.endswith(".xls")):
+        return Response({
+            "success": False,
+            "error": "Envie um arquivo XML ou Excel válido (.xml, .xlsx, .xlsm, .xls)."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.user.is_authenticated:
+        from django.contrib.admin.models import LogEntry, CHANGE
+        from django.contrib.contenttypes.models import ContentType
+        from colaboradores.models import Colaborador
+        LogEntry.objects.log_action(
+            user_id=request.user.id,
+            content_type_id=ContentType.objects.get_for_model(Colaborador).pk,
+            object_id=0,
+            object_repr="Importação de Valores de Rescisão (GPER020)",
+            action_flag=CHANGE,
+            change_message=f"Iniciou a importação de valores de rescisão (GPER020): {arquivo.name}"
+        )
+
+    return _iniciar_importacao_async(
+        tipo_importacao="gper020",
+        payload={"conteudo": arquivo.read(), "nome": arquivo.name or "gper020.xml"},
+        titulo="Progresso da Importação de Valores de Rescisão (GPER020)",
+        mensagem_inicial="Iniciando leitura da página 2 e processamento dos valores de rescisão...",
+    )
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, IsAdministrador])
 def folha_import_async(request):
     """
@@ -227,11 +295,11 @@ def folha_import_async(request):
         return Response({"success": False, "error": "Envie um arquivo CSV de folha válido."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        conteudo = arquivo.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
+        conteudo = decodificar_arquivo_csv(arquivo)
+    except Exception:
         return Response({
             "success": False,
-            "error": "Não foi possível ler o arquivo. Salve o CSV em UTF-8 e tente de novo."
+            "error": "Não foi possível ler o arquivo. Certifique-se de que é um CSV em UTF-8 ou ISO-8859-1."
         }, status=status.HTTP_400_BAD_REQUEST)
 
     if request.user.is_authenticated:
@@ -283,15 +351,12 @@ def diaria_import_async(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        conteudo_sistema = arquivo_sistema.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
-        try:
-            conteudo_sistema = arquivo_sistema.read().decode("iso-8859-1")
-        except UnicodeDecodeError:
-            return Response({
-                "success": False,
-                "error": "Não foi possível ler o arquivo do sistema. Salve o CSV em UTF-8 e tente de novo."
-            }, status=status.HTTP_400_BAD_REQUEST)
+        conteudo_sistema = decodificar_arquivo_csv(arquivo_sistema)
+    except Exception:
+        return Response({
+            "success": False,
+            "error": "Não foi possível ler o arquivo do sistema. Certifique-se de que é um CSV em UTF-8 ou ISO-8859-1."
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     if request.user.is_authenticated:
         from django.contrib.admin.models import LogEntry, CHANGE
@@ -507,6 +572,14 @@ def _processar_importacao_background(import_id, tipo_importacao):
                 progress_callback=atualizar_progresso,
             )
             mensagem, status_msg = resultado["mensagem"], "success"
+        elif tipo_importacao == "gper020":
+            from colaboradores.services.importacao_rescisao import importar_valores_rescisao_de_arquivo
+            resultado = importar_valores_rescisao_de_arquivo(
+                payload["conteudo"],
+                nome_arquivo=payload.get("nome", "gper020.xml"),
+                progress_callback=atualizar_progresso,
+            )
+            mensagem, status_msg = _montar_mensagem_gper020(resultado)
         else:
             raise ValueError("Tipo de importacao invalido.")
 
@@ -546,6 +619,25 @@ def _processar_importacao_background(import_id, tipo_importacao):
             },
             timeout=600,
         )
+
+def _montar_mensagem_gper020(resultado):
+    total = resultado.get("total", 0)
+    if total == 0:
+        return "Nenhum registro de rescisão encontrado no relatório GPER020. Verifique a Página 2.", "warning"
+
+    atualizados = resultado.get("atualizados", 0)
+    valor_total = resultado.get("valor_total", 0.0)
+    nao_encontrados = len(resultado.get("nao_encontrados", []))
+
+    mensagem = (
+        f"Importação GPER020 concluída: {total} registros processados. "
+        f"{atualizados} colaborador(es) atualizado(s) com valor total de R$ {valor_total:,.2f}."
+    )
+    if nao_encontrados > 0:
+        mensagem += f" ({nao_encontrados} matrícula(s) no arquivo não encontradas no banco)."
+        return mensagem, "warning"
+
+    return mensagem, "success"
 
 def _montar_mensagem_turnover(resultado):
     total = resultado.get("total", 0)

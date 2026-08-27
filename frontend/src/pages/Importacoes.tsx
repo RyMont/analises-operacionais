@@ -37,6 +37,7 @@ export default function Importacoes() {
   const [gestaoFile, setGestaoFile] = useState<File | null>(null);
   const [folhaFile, setFolhaFile] = useState<File | null>(null);
   const [turnoverFile, setTurnoverFile] = useState<File | null>(null);
+  const [gper020File, setGper020File] = useState<File | null>(null);
   const [marcasFile, setMarcasFile] = useState<File | null>(null);
   
   // Novos estados para importação unificada de diárias
@@ -67,10 +68,11 @@ export default function Importacoes() {
           clearInterval(intervalId);
           setLoading(false);
           // Limpa todos os arquivos da tela após conclusão com sucesso
-           setSraFile(null);
+          setSraFile(null);
           setGestaoFile(null);
           setFolhaFile(null);
           setTurnoverFile(null);
+          setGper020File(null);
           setMarcasFile(null);
           setDiariaSistemaFile(null);
           setDiariaManualFile(null);
@@ -92,7 +94,7 @@ export default function Importacoes() {
   };
 
   // Faz o envio (upload) do arquivo para a API correspondente
-  const handleUpload = async (tipo: 'sra' | 'gestao' | 'folha' | 'turnover' | 'marcas', file: File | null) => {
+  const handleUpload = async (tipo: 'sra' | 'gestao' | 'folha' | 'turnover' | 'gper020' | 'marcas', file: File | null) => {
     if (!file) {
       alert('Selecione um arquivo primeiro.');
       return;
@@ -116,6 +118,7 @@ export default function Importacoes() {
     else if (tipo === 'gestao') endpoint = '/colaboradores/importar-gestao/';
     else if (tipo === 'folha') endpoint = '/folhas/importar/';
     else if (tipo === 'turnover') endpoint = '/colaboradores/importar-turnover/';
+    else if (tipo === 'gper020') endpoint = '/colaboradores/importar-gper020/';
     else if (tipo === 'marcas') endpoint = '/colaboradores/importar-marcas/';
 
     try {
@@ -284,21 +287,39 @@ export default function Importacoes() {
         />
 
         {permissions?.turnover?.create && (
-          <UploadCard
-            title="Rescisões / Turnover (TOTVS - SRG)"
-            description="Carga de rescisões, motivos e verbas indenizadas. Formato aceito: CSV da tabela SRG (sc569530.csv / rescisões)."
-            icon={
-              <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500">
-                <TrendingDown className="h-6 w-6" />
-              </div>
-            }
-            accept=".csv"
-            file={turnoverFile}
-            setFile={setTurnoverFile}
-            loading={loading}
-            buttonText="Importar Rescisões (SRG)"
-            onUpload={() => handleUpload('turnover', turnoverFile)}
-          />
+          <>
+            <UploadCard
+              title="Rescisões / Turnover (TOTVS - SRG)"
+              description="Carga de motivos de demissão e verbas da tabela SRG (sc575190.csv / rescisões)."
+              icon={
+                <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500">
+                  <TrendingDown className="h-6 w-6" />
+                </div>
+              }
+              accept=".csv"
+              file={turnoverFile}
+              setFile={setTurnoverFile}
+              loading={loading}
+              buttonText="Importar Rescisões (SRG)"
+              onUpload={() => handleUpload('turnover', turnoverFile)}
+            />
+
+            <UploadCard
+              title="Valores de Rescisão - Totvs Liquido"
+              description="Carga dos valores financeiros reais e líquidos pagos em rescisões (Relatório - Página 2)."
+              icon={
+                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+                  <Coins className="h-6 w-6" />
+                </div>
+              }
+              accept=".xml,.xlsx,.xls,.xlsm"
+              file={gper020File}
+              setFile={setGper020File}
+              loading={loading}
+              buttonText="Importar Valores"
+              onUpload={() => handleUpload('gper020', gper020File)}
+            />
+          </>
         )}
 
         {role !== 'Gestão' && (

@@ -44,3 +44,8 @@ iniciar_projeto.bat
 
 # Arquivos de dados locais
 *.csv
+*.xml
+*.xlsx
+*.xls
+*.xlsm
+
