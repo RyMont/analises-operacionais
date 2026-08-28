@@ -802,6 +802,9 @@ class ResumoFolhaMensal(models.Model):
     valor_adicional_noturno = models.DecimalField(
         "Valor adicional noturno", max_digits=14, decimal_places=2, default=Decimal("0.00")
     )
+    valor_verbas_extraordinarias = models.DecimalField(
+        "Valor verbas extraordinárias", max_digits=14, decimal_places=2, default=Decimal("0.00")
+    )
 
     class Meta:
         verbose_name = "Resumo de folha mensal"

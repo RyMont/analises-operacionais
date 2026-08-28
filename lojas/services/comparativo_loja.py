@@ -115,11 +115,14 @@ class ResultadoComparativoLoja:
     folha_salario_categoria_total: Decimal = Decimal("0.00")
     folha_insalubridade_categoria_total: Decimal = Decimal("0.00")
     folha_adicional_noturno_categoria_total: Decimal = Decimal("0.00")
+    folha_verbas_extraordinarias_categoria_total: Decimal = Decimal("0.00")
+    escopo_verbas_extraordinarias_total: Decimal = Decimal("0.00")
 
     # Detalhe por colaborador para a tabela expansível (drill-down no frontend)
     colaboradores_salario: List[Dict] = field(default_factory=list)
     colaboradores_insalubridade: List[Dict] = field(default_factory=list)
     colaboradores_adicional_noturno: List[Dict] = field(default_factory=list)
+    colaboradores_verbas_extraordinarias: List[Dict] = field(default_factory=list)
 
     @property
     def escopo_insalubridade_total(self) -> Decimal:
@@ -158,12 +161,21 @@ class ResultadoComparativoLoja:
         )
 
     @property
+    def desvio_verbas_extraordinarias(self) -> Decimal:
+        """Diferença específica para a rubrica de Verbas Extraordinárias."""
+        return (
+            self.folha_verbas_extraordinarias_categoria_total
+            - self.escopo_verbas_extraordinarias_total
+        )
+
+    @property
     def tabela_escopo_total(self) -> Decimal:
         """Soma total apenas das colunas estimadas que aparecem na tabela de detalhamento."""
         return (
             self.escopo_base_total
             + self.escopo_insalubridade_total
             + self.escopo_adicional_noturno_total
+            + self.escopo_verbas_extraordinarias_total
         )
 
     @property
@@ -173,6 +185,7 @@ class ResultadoComparativoLoja:
             self.folha_salario_categoria_total
             + self.folha_insalubridade_categoria_total
             + self.folha_adicional_noturno_categoria_total
+            + self.folha_verbas_extraordinarias_categoria_total
         )
 
     @property
@@ -214,6 +227,7 @@ def montar_resultado_comparativo(
     folha_salario = Decimal("0.00")
     folha_insalubridade = Decimal("0.00")
     folha_adicional_noturno = Decimal("0.00")
+    folha_verbas_extraordinarias = Decimal("0.00")
 
     for r in resumos:
         folha_total += r.valor_total
@@ -221,12 +235,14 @@ def montar_resultado_comparativo(
         folha_salario += r.valor_salario
         folha_insalubridade += r.valor_insalubridade
         folha_adicional_noturno += r.valor_adicional_noturno
+        folha_verbas_extraordinarias += r.valor_verbas_extraordinarias
 
     resultado.folha_total = folha_total
     resultado.folha_linhas_count = folha_linhas_count
     resultado.folha_salario_categoria_total = folha_salario
     resultado.folha_insalubridade_categoria_total = folha_insalubridade
     resultado.folha_adicional_noturno_categoria_total = folha_adicional_noturno
+    resultado.folha_verbas_extraordinarias_categoria_total = folha_verbas_extraordinarias
 
     # --- Escopo: todos os itens dos escopos mensais da loja nesses meses
     itens_todos: List[ItemEscopoMensal] = []
@@ -342,8 +358,8 @@ def montar_resultado_comparativo(
     # =========================================================================
     # DETALHAMENTO DE COLABORADORES POR CATEGORIA (Rubricas detalhadas)
     # Por que existe: Permite que o usuário no frontend clique em uma categoria
-    # (Salário Base, Insalubridade, Adicional Noturno) para expandir e listar
-    # quais colaboradores receberam valores e quanto receberam no período selecionado.
+    # (Salário Base, Insalubridade, Adicional Noturno, Verbas Extraordinárias)
+    # para expandir e listar quais colaboradores receberam valores e quanto receberam.
     # =========================================================================
     folha_qs = LinhaFolha.objects.filter(
         loja_id=loja_id,
@@ -378,9 +394,16 @@ def montar_resultado_comparativo(
         .order_by("-total")
     )
 
+    linhas_extraordinarias = (
+        folha_qs.exclude(q_salario).exclude(q_insalubridade).exclude(q_adicional_noturno)
+        .values("matricula")
+        .annotate(total=Sum("valor"))
+        .order_by("-total")
+    )
+
     # Coleta todas as matrículas para obter os nomes em uma única query
     todas_matriculas = set()
-    for item in list(linhas_salario) + list(linhas_insalubridade) + list(linhas_adicional_noturno):
+    for item in list(linhas_salario) + list(linhas_insalubridade) + list(linhas_adicional_noturno) + list(linhas_extraordinarias):
         todas_matriculas.add(item["matricula"])
 
     # Importação local do Colaborador para evitar importação circular no Django
@@ -405,5 +428,6 @@ def montar_resultado_comparativo(
     resultado.colaboradores_salario = formatar_lista_colabs(linhas_salario)
     resultado.colaboradores_insalubridade = formatar_lista_colabs(linhas_insalubridade)
     resultado.colaboradores_adicional_noturno = formatar_lista_colabs(linhas_adicional_noturno)
+    resultado.colaboradores_verbas_extraordinarias = formatar_lista_colabs(linhas_extraordinarias)
 
     return resultado

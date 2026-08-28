@@ -492,6 +492,7 @@ def recalcular_resumos_folha(lojas_e_datas):
     q_salario = _q_categoria_um_dos(CAT_FOLHA_SALARIO)
     q_insalubridade = _q_categoria_um_dos(CAT_FOLHA_INSALUBRIDADE)
     q_adicional_noturno = _q_categoria_um_dos(CAT_FOLHA_ADICIONAL_NOTURNO)
+    q_extraordinarias = ~q_salario & ~q_insalubridade & ~q_adicional_noturno
 
     agregados = (
         folha_qs.values("loja_id", "dt_arq")
@@ -519,6 +520,13 @@ def recalcular_resumos_folha(lojas_e_datas):
                     output_field=DecimalField(max_digits=14, decimal_places=2),
                 )
             ),
+            valor_verbas_extraordinarias=Sum(
+                Case(
+                    When(q_extraordinarias, then="valor"),
+                    default=Value(Decimal("0.00")),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            ),
         )
     )
 
@@ -536,6 +544,7 @@ def recalcular_resumos_folha(lojas_e_datas):
                 "valor_salario": agg["valor_salario"] or Decimal("0.00"),
                 "valor_insalubridade": agg["valor_insalubridade"] or Decimal("0.00"),
                 "valor_adicional_noturno": agg["valor_adicional_noturno"] or Decimal("0.00"),
+                "valor_verbas_extraordinarias": agg["valor_verbas_extraordinarias"] or Decimal("0.00"),
             },
         )
         atualizados.add((loja_id, dt_arq))
@@ -572,6 +581,7 @@ def recalcular_todo_historico():
     q_salario = _q_categoria_um_dos(CAT_FOLHA_SALARIO)
     q_insalubridade = _q_categoria_um_dos(CAT_FOLHA_INSALUBRIDADE)
     q_adicional_noturno = _q_categoria_um_dos(CAT_FOLHA_ADICIONAL_NOTURNO)
+    q_extraordinarias = ~q_salario & ~q_insalubridade & ~q_adicional_noturno
 
     agregados = (
         folha_qs.values("loja_id", "dt_arq")
@@ -599,6 +609,13 @@ def recalcular_todo_historico():
                     output_field=DecimalField(max_digits=14, decimal_places=2),
                 )
             ),
+            valor_verbas_extraordinarias=Sum(
+                Case(
+                    When(q_extraordinarias, then="valor"),
+                    default=Value(Decimal("0.00")),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            ),
         )
     )
 
@@ -613,6 +630,7 @@ def recalcular_todo_historico():
                 valor_salario=agg["valor_salario"] or Decimal("0.00"),
                 valor_insalubridade=agg["valor_insalubridade"] or Decimal("0.00"),
                 valor_adicional_noturno=agg["valor_adicional_noturno"] or Decimal("0.00"),
+                valor_verbas_extraordinarias=agg["valor_verbas_extraordinarias"] or Decimal("0.00"),
             )
         )
 

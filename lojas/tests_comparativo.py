@@ -387,6 +387,68 @@ class ComparativoViewsTests(TestCase):
         self.assertEqual(kpis["realizado_total"], 0.0)
         self.assertEqual(kpis["orcado_total"], 0.0)
 
+    def test_verbas_extraordinarias_calculo_e_detalhamento(self):
+        """
+        Por que existe: Garante que verbas que não são Salário, Insalubridade nem Adicional Noturno
+        sejam devidamente alocadas na categoria 'Verbas Extraordinárias', permitindo drill-down
+        e fechando a soma da tabela em 100% com o total da folha.
+        """
+        from lojas.services.folha_importacao import recalcular_resumos_folha
+        from lojas.models import ResumoFolhaMensal
+
+        # Cria verba extraordinária
+        verba_extra = Verba.objects.create(
+            codigo_verba="999",
+            descricao="Premiacao Eventual",
+            tipo_codigo="PROVENTO",
+            considerar_na_contagem=True,
+            categoria="PREMIACOES",
+        )
+
+        # Adiciona LinhaFolha com verba extraordinária
+        LinhaFolha.objects.create(
+            matricula="RE002",
+            verba=verba_extra,
+            codigo_verba="999",
+            valor=Decimal("450.00"),
+            dt_arq=date(2026, 3, 1),
+            dt_pagamento=date(2026, 3, 30),
+            centro_custo="123456789012",
+            centro_custo_real="123456789012",
+            loja=self.loja,
+            categoria="PREMIACOES",
+        )
+
+        # Recalcula os resumos da folha
+        recalcular_resumos_folha([(self.loja.id, date(2026, 3, 1))])
+
+        # Verifica o valor gravado em ResumoFolhaMensal
+        resumo = ResumoFolhaMensal.objects.get(loja=self.loja, dt_arq=date(2026, 3, 1))
+        self.assertEqual(resumo.valor_salario, Decimal("1600.00"))
+        self.assertEqual(resumo.valor_verbas_extraordinarias, Decimal("450.00"))
+        self.assertEqual(resumo.valor_total, Decimal("2050.00"))
+
+        # Executa a montagem do comparativo
+        res = montar_resultado_comparativo(self.loja.pk, [(2026, 3)])
+        self.assertIsNotNone(res)
+        self.assertEqual(res.folha_salario_categoria_total, Decimal("1600.00"))
+        self.assertEqual(res.folha_verbas_extraordinarias_categoria_total, Decimal("450.00"))
+        self.assertEqual(res.desvio_verbas_extraordinarias, Decimal("450.00"))
+        self.assertEqual(res.folha_total, Decimal("2050.00"))
+        self.assertEqual(res.tabela_folha_total, Decimal("2050.00"))
+        self.assertEqual(len(res.colaboradores_verbas_extraordinarias), 1)
+        self.assertEqual(res.colaboradores_verbas_extraordinarias[0]["matricula"], "RE002")
+        self.assertEqual(res.colaboradores_verbas_extraordinarias[0]["valor"], 450.0)
+
+        # Valida chamada à API de comparativo da loja
+        response = self.client.get("/comparativo/", {"loja": str(self.loja.id), "c": "2026-3"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        res_api = response.data["resultado"]
+        self.assertEqual(res_api["folha_verbas_extraordinarias_categoria_total"], "450.00")
+        self.assertEqual(res_api["desvio_verbas_extraordinarias"], "450.00")
+        self.assertEqual(len(res_api["colaboradores_verbas_extraordinarias"]), 1)
+
+
 
 
 

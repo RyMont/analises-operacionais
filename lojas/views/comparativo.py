@@ -77,16 +77,19 @@ def comparativo_loja(request):
                 "folha_salario_categoria_total": str(resultado.folha_salario_categoria_total),
                 "folha_insalubridade_categoria_total": str(resultado.folha_insalubridade_categoria_total),
                 "folha_adicional_noturno_categoria_total": str(resultado.folha_adicional_noturno_categoria_total),
+                "folha_verbas_extraordinarias_categoria_total": str(resultado.folha_verbas_extraordinarias_categoria_total),
                 "diferenca_folha_menos_escopo": str(resultado.diferenca_folha_menos_escopo),
                 "desvio_salario": str(resultado.desvio_salario),
                 "desvio_insalubridade": str(resultado.desvio_insalubridade),
                 "desvio_adicional_noturno": str(resultado.desvio_adicional_noturno),
+                "desvio_verbas_extraordinarias": str(resultado.desvio_verbas_extraordinarias),
                 "tabela_escopo_total": str(resultado.tabela_escopo_total),
                 "tabela_folha_total": str(resultado.tabela_folha_total),
                 "tabela_desvio_total": str(resultado.tabela_desvio_total),
                 "colaboradores_salario": resultado.colaboradores_salario,
                 "colaboradores_insalubridade": resultado.colaboradores_insalubridade,
                 "colaboradores_adicional_noturno": resultado.colaboradores_adicional_noturno,
+                "colaboradores_verbas_extraordinarias": resultado.colaboradores_verbas_extraordinarias,
             }
 
     return Response({

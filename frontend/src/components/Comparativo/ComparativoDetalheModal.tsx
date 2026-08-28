@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Loader2, X, AlertCircle, FileText, CalendarCheck, TrendingUp, Calculator, Scale, Info, ChevronDown, ChevronUp, User } from 'lucide-react';
+import { Loader2, X, AlertCircle, FileText, CalendarCheck, TrendingUp, Calculator, Scale, Info, ChevronDown, ChevronUp, User, Sparkles } from 'lucide-react';
 import api from '../../api/client';
 import { formatCurrency } from '../../utils/formatters';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside';
@@ -23,16 +23,19 @@ export interface ResultadoComparativo {
   folha_salario_categoria_total: string;
   folha_insalubridade_categoria_total: string;
   folha_adicional_noturno_categoria_total: string;
+  folha_verbas_extraordinarias_categoria_total: string;
   diferenca_folha_menos_escopo: string;
   desvio_salario: string;
   desvio_insalubridade: string;
   desvio_adicional_noturno: string;
+  desvio_verbas_extraordinarias: string;
   tabela_escopo_total: string;
   tabela_folha_total: string;
   tabela_desvio_total: string;
   colaboradores_salario?: { matricula: string; nome: string; valor: number }[];
   colaboradores_insalubridade?: { matricula: string; nome: string; valor: number }[];
   colaboradores_adicional_noturno?: { matricula: string; nome: string; valor: number }[];
+  colaboradores_verbas_extraordinarias?: { matricula: string; nome: string; valor: number }[];
 }
 
 interface ComparativoDetalheModalProps {
@@ -381,6 +384,61 @@ export default function ComparativoDetalheModal({
                           </td>
                         </tr>
                       )}
+
+                      {/* Verbas Extraordinárias */}
+                      <tr 
+                        onClick={() => toggleCategory('verbas_extraordinarias')}
+                        className="cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-850/30 transition-colors"
+                      >
+                        <td className="py-3.5 px-5 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                          <span>Verbas Extraordinárias</span>
+                          {expandedCategories['verbas_extraordinarias'] ? (
+                            <ChevronUp className="h-3 w-3 text-neutral-400 ml-0.5" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3 text-neutral-400 ml-0.5" />
+                          )}
+                        </td>
+                        <td className="py-3.5 px-5 text-right font-mono">{formatCurrency('0')}</td>
+                        <td className="py-3.5 px-5 text-right font-mono">{formatCurrency(resultado.folha_verbas_extraordinarias_categoria_total || '0')}</td>
+                        <td className="py-3.5 px-5 text-center font-mono">{getDesvioBadge(resultado.desvio_verbas_extraordinarias || resultado.folha_verbas_extraordinarias_categoria_total || '0')}</td>
+                      </tr>
+                      {expandedCategories['verbas_extraordinarias'] && (
+                        <tr>
+                          <td colSpan={4} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-800">
+                            <div className="p-4 md:px-8 space-y-2">
+                              <h4 className="text-[10px] font-bold text-neutral-455 uppercase tracking-wider flex items-center gap-1.5">
+                                <User className="h-3.5 w-3.5" />
+                                Detalhamento de Verbas Extraordinárias por Colaborador
+                              </h4>
+                              {resultado.colaboradores_verbas_extraordinarias && resultado.colaboradores_verbas_extraordinarias.length > 0 ? (
+                                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-w-2xl bg-white dark:bg-neutral-900 shadow-xs">
+                                  <table className="w-full text-left border-collapse text-[11px]">
+                                    <thead>
+                                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 text-neutral-450 font-extrabold uppercase tracking-wider">
+                                        <th className="p-2 w-28">Matrícula</th>
+                                        <th className="p-2">Nome</th>
+                                        <th className="p-2 text-right w-32">Valor Recebido</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
+                                      {resultado.colaboradores_verbas_extraordinarias.map((colab: any) => (
+                                        <tr key={colab.matricula} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/50">
+                                          <td className="p-2 font-mono">{colab.matricula}</td>
+                                          <td className="p-2 font-semibold text-neutral-900 dark:text-neutral-100">{colab.nome}</td>
+                                          <td className="p-2 text-right font-mono">{formatCurrency(colab.valor.toString())}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-neutral-455 italic py-1">Nenhum colaborador com lançamentos nesta categoria.</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                     <tfoot>
                       <tr className="bg-neutral-50 dark:bg-neutral-850 font-bold border-t border-neutral-200 dark:border-neutral-800 text-neutral-900 dark:text-neutral-50 text-[13px]">
@@ -405,8 +463,7 @@ export default function ComparativoDetalheModal({
                 <div>
                   <p>
                     <strong className="text-neutral-850 dark:text-neutral-200 font-bold block mb-1">Sobre os Desvios de Rubricas:</strong>
-                    A coluna de desvios calcula o real subtraído do orçado. O Total Geral da Folha reflete a soma bruta de todas as verbas importadas. 
-                    As outras linhas e totais da tabela consideram apenas o cruzamento de rubricas coincidentes. Divergências apontam verbas extraordinárias não mapeadas no orçado de escopo original.
+                    A coluna de desvios calcula o realizado subtraído do orçado planejado. Todas as verbas consideradas que não se enquadram em Salário Base, Insalubridade ou Adicional Noturno são categorizadas como "Verbas Extraordinárias", garantindo 100% de conciliação com o Total Consolidado da Folha.
                   </p>
                 </div>
               </div>
