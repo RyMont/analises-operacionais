@@ -370,22 +370,34 @@ def importar_folha_de_texto(conteudo_utf8, arquivo_origem, dry_run=False, progre
         if len(detalhes_duplicadas) < LIMITE_DETALHES_DUPLICADAS:
             detalhes_duplicadas.append(_linha_para_detalhe_duplicada(d, "repetida_no_mesmo_arquivo"))
 
-    # 2. Identifica competências e lojas presentes no novo arquivo
-    dt_arqs_presentes = [d for d in df_unicos["dt_arq"].unique().tolist() if pd.notna(d)]
-    lojas_e_datas_anteriores = set(
-        LinhaFolha.objects.filter(dt_arq__in=dt_arqs_presentes, loja_id__isnull=False)
-        .order_by()
-        .values_list("loja_id", "dt_arq")
+    if progress_callback:
+        progress_callback(55, "Comparando folha com linhas ja gravadas...")
+
+    # 2. Busca eficiente no Banco: identifica o que já existe para não alterar nem duplicar
+    matriculas = df_unicos["matricula"].unique().tolist()
+    dt_arqs = [d for d in df_unicos["dt_arq"].unique().tolist() if pd.notna(d)]
+
+    existentes = set(
+        LinhaFolha.objects.filter(matricula__in=matriculas, dt_arq__in=dt_arqs)
+        .values_list("matricula", "verba_id", "valor", "dt_arq", "centro_custo")
     )
 
     para_gravar = []
     detalhes_sem_loja = []
+    ignoradas_duplicadas = duplicadas_no_arquivo
     total_unicas = len(df_unicos)
 
     for indice, (_, d) in enumerate(df_unicos.iterrows(), start=1):
         if progress_callback and total_unicas > 0 and indice % 1000 == 0:
             progresso = 55 + int((indice / total_unicas) * 25)
             progress_callback(progresso, f"Preparando linhas da folha... {indice}/{total_unicas}")
+
+        k = (d["matricula"], d["verba_id"], _normalizar_valor_chave(d["valor"]), d["dt_arq"], d["centro_custo"])
+        if k in existentes:
+            ignoradas_duplicadas += 1
+            if len(detalhes_duplicadas) < LIMITE_DETALHES_DUPLICADAS:
+                detalhes_duplicadas.append(_linha_para_detalhe_duplicada(d, "ja_existia_no_banco"))
+            continue
 
         # Sanitização do loja_id para evitar floats/NaNs implícitos do Pandas
         val_loja = d["loja_id"]
@@ -420,12 +432,12 @@ def importar_folha_de_texto(conteudo_utf8, arquivo_origem, dry_run=False, progre
     resumo = {
         "processadas": len(dados),
         "gravadas": len(para_gravar),
-        "ignoradas_duplicadas": duplicadas_no_arquivo,
+        "ignoradas_duplicadas": ignoradas_duplicadas,
         "sem_loja": sem_loja,
         "dry_run": dry_run,
         "detalhes_duplicadas": detalhes_duplicadas,
         "detalhes_sem_loja": detalhes_sem_loja,
-        "detalhes_duplicadas_truncado": duplicadas_no_arquivo > len(detalhes_duplicadas),
+        "detalhes_duplicadas_truncado": ignoradas_duplicadas > len(detalhes_duplicadas),
         "detalhes_sem_loja_truncado": sem_loja > len(detalhes_sem_loja),
     }
 
@@ -433,23 +445,26 @@ def importar_folha_de_texto(conteudo_utf8, arquivo_origem, dry_run=False, progre
         return resumo
 
     if progress_callback:
-        progress_callback(80, "Substituindo registros anteriores e gravando novas linhas da folha...")
+        progress_callback(85, "Gravando novas linhas da folha no banco...")
 
-    # 3. Substituição e Gravação em Lote Otimizada dentro de transação atômica
+    # 3. Gravação em Lote Otimizada dentro de transação atômica (apenas novas linhas)
     with transaction.atomic():
-        # Limpa dados anteriores das competências presentes no arquivo
-        if dt_arqs_presentes:
-            LinhaFolha.objects.filter(dt_arq__in=dt_arqs_presentes).delete()
+        if para_gravar:
+            LinhaFolha.objects.bulk_create(para_gravar, batch_size=2000)
 
-        LinhaFolha.objects.bulk_create(para_gravar, batch_size=2000)
+        # Coleta os pares de (loja_id, dt_arq) do arquivo para garantir que os resumos fiquem sincronizados
+        lojas_e_datas_arquivo = set()
+        for _, r in df_unicos.iterrows():
+            val_loja = r["loja_id"]
+            if pd.notna(val_loja) and pd.notna(r["dt_arq"]):
+                try:
+                    loja_id_val = int(float(str(val_loja).strip()))
+                    lojas_e_datas_arquivo.add((loja_id_val, r["dt_arq"]))
+                except (ValueError, TypeError):
+                    pass
 
-        # Coleta os pares de (loja_id, dt_arq) afetados (anteriores + novos) para recalcular
-        novas_lojas_e_datas = set(
-            (obj.loja_id, obj.dt_arq) for obj in para_gravar if obj.loja_id is not None
-        )
-        todas_lojas_e_datas = lojas_e_datas_anteriores | novas_lojas_e_datas
-        if todas_lojas_e_datas:
-            recalcular_resumos_folha(list(todas_lojas_e_datas))
+        if lojas_e_datas_arquivo:
+            recalcular_resumos_folha(list(lojas_e_datas_arquivo))
 
     if progress_callback:
         progress_callback(95, "Finalizando resumo da importacao SRD...")
