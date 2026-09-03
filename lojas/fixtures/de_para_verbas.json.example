@@ -1,0 +1,32 @@
+[
+  {
+    "codigo": "001",
+    "descricao": "SALARIO MENSALISTA",
+    "tipo": "Provento"
+  },
+  {
+    "codigo": "054",
+    "descricao": "INSALUBRIDADE MAXIMO",
+    "tipo": "Provento"
+  },
+  {
+    "codigo": "105",
+    "descricao": "AD NOTURNO 20%",
+    "tipo": "Provento"
+  },
+  {
+    "codigo": "272",
+    "descricao": "ATESTADO MEDICO",
+    "tipo": "Provento"
+  },
+  {
+    "codigo": "650",
+    "descricao": "CONVENIO MEDICO",
+    "tipo": "Desconto"
+  },
+  {
+    "codigo": "998",
+    "descricao": "BASE DE CALCULO FGTS",
+    "tipo": "Base"
+  }
+]

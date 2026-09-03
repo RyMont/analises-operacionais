@@ -1,6 +1,7 @@
 # Agrega estimativa de escopo (vários meses) e total da folha por loja e competências (DT ARQ).
 # Usado na tela de comparativo estilo BI.
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Dict, List, Optional, Set, Tuple
@@ -17,6 +18,7 @@ from lojas.models import (
     escala_insalubridade_fixa_para_escopo,
     montar_caches_salario_para_itens,
 )
+from lojas.services.verbas_de_para import obter_info_verba
 
 # ---------------------------------------------------------------------------
 # Categorias da planilha de verbas (coluna "Categoria Inovação" / campo categoria).
@@ -360,51 +362,48 @@ def montar_resultado_comparativo(
     # Por que existe: Permite que o usuário no frontend clique em uma categoria
     # (Salário Base, Insalubridade, Adicional Noturno, Verbas Extraordinárias)
     # para expandir e listar quais colaboradores receberam valores e quanto receberam.
+    # Ao clicar no colaborador, exibe a descrição detalhada das verbas e seus cálculos
+    # com base no mapeamento De-Para de verbas (código, descrição e tipo).
     # =========================================================================
     folha_qs = LinhaFolha.objects.filter(
         loja_id=loja_id,
         dt_arq__in=datas_exatas,
         verba__tipo_codigo="PROVENTO",
         verba__considerar_na_contagem=True,
+    ).select_related("verba")
+
+    # Todas as linhas da loja no período para permitir drill-down completo se solicitado
+    todas_linhas_loja = list(
+        LinhaFolha.objects.filter(
+            loja_id=loja_id,
+            dt_arq__in=datas_exatas,
+        ).select_related("verba")
     )
+
+    todas_linhas_por_mat = defaultdict(list)
+    for l in todas_linhas_loja:
+        todas_linhas_por_mat[l.matricula].append(l)
 
     q_salario = _q_categoria_um_dos(CAT_FOLHA_SALARIO)
     q_insalubridade = _q_categoria_um_dos(CAT_FOLHA_INSALUBRIDADE)
     q_adicional_noturno = _q_categoria_um_dos(CAT_FOLHA_ADICIONAL_NOTURNO)
 
-    # Agrupa e soma no banco de dados por matricula (usando Group By matricula)
-    linhas_salario = (
-        folha_qs.filter(q_salario)
-        .values("matricula")
-        .annotate(total=Sum("valor"))
-        .order_by("-total")
-    )
-    
-    linhas_insalubridade = (
-        folha_qs.filter(q_insalubridade)
-        .values("matricula")
-        .annotate(total=Sum("valor"))
-        .order_by("-total")
-    )
-    
-    linhas_adicional_noturno = (
-        folha_qs.filter(q_adicional_noturno)
-        .values("matricula")
-        .annotate(total=Sum("valor"))
-        .order_by("-total")
-    )
-
-    linhas_extraordinarias = (
+    linhas_salario_lista = list(folha_qs.filter(q_salario))
+    linhas_insalubridade_lista = list(folha_qs.filter(q_insalubridade))
+    linhas_adicional_noturno_lista = list(folha_qs.filter(q_adicional_noturno))
+    linhas_extraordinarias_lista = list(
         folha_qs.exclude(q_salario).exclude(q_insalubridade).exclude(q_adicional_noturno)
-        .values("matricula")
-        .annotate(total=Sum("valor"))
-        .order_by("-total")
     )
 
     # Coleta todas as matrículas para obter os nomes em uma única query
-    todas_matriculas = set()
-    for item in list(linhas_salario) + list(linhas_insalubridade) + list(linhas_adicional_noturno) + list(linhas_extraordinarias):
-        todas_matriculas.add(item["matricula"])
+    todas_matriculas = {
+        l.matricula for l in (
+            linhas_salario_lista +
+            linhas_insalubridade_lista +
+            linhas_adicional_noturno_lista +
+            linhas_extraordinarias_lista
+        )
+    }
 
     # Importação local do Colaborador para evitar importação circular no Django
     from colaboradores.models import Colaborador
@@ -413,21 +412,95 @@ def montar_resultado_comparativo(
         for colab in Colaborador.objects.filter(re__in=todas_matriculas)
     }
 
-    def formatar_lista_colabs(linhas_agrupadas):
-        lista = []
-        for item in linhas_agrupadas:
-            mat = item["matricula"]
+    def processar_detalhe_colaboradores(linhas_categoria):
+        """
+        Agrupa as linhas da categoria por matrícula e calcula:
+        - total_proventos: soma das verbas com Tipo Provento/Proventos
+        - total_descontos: soma das verbas com Tipo Desconto
+        - total_base: soma informativa das verbas com Tipo Base
+        - valor: total_proventos - total_descontos
+        - verbas: lista detalhada com codigo, descricao Protheus, tipo e valor
+        - todas_verbas: visão de todas as verbas do colaborador no período
+        """
+        por_mat = defaultdict(list)
+        for l in linhas_categoria:
+            por_mat[l.matricula].append(l)
+
+        lista_colabs = []
+        for mat, linhas in por_mat.items():
             nome = colaboradores_dict.get(mat) or f"Colaborador {mat}"
-            lista.append({
+            verbas_detalhe = []
+            tot_proventos = Decimal("0.00")
+            tot_descontos = Decimal("0.00")
+            tot_base = Decimal("0.00")
+
+            for l in linhas:
+                info = obter_info_verba(
+                    codigo=l.codigo_verba,
+                    fallback_descricao=l.verba.descricao if l.verba else "",
+                    fallback_tipo=l.verba.tipo_codigo if l.verba else "Provento",
+                )
+                val = Decimal(str(l.valor))
+                tipo_final = info.get("tipo", "Provento")
+                tipo_lower = tipo_final.lower()
+
+                if "desconto" in tipo_lower:
+                    tot_descontos += val
+                elif "base" in tipo_lower:
+                    tot_base += val
+                else:
+                    tot_proventos += val
+
+                verbas_detalhe.append({
+                    "codigo": info["codigo"],
+                    "codigo_original": l.codigo_verba,
+                    "descricao": info["descricao"],
+                    "tipo": tipo_final,
+                    "valor": float(val),
+                    "dt_arq": str(l.dt_arq),
+                })
+
+            verbas_detalhe.sort(key=lambda x: x["valor"], reverse=True)
+            # Valor calculado considerando proventos menos descontos
+            valor_calculado = tot_proventos - tot_descontos
+
+            # Todas as verbas do colaborador no mês para visão ampla
+            todas_verbas_colab = []
+            for l in todas_linhas_por_mat.get(mat, []):
+                info_t = obter_info_verba(
+                    codigo=l.codigo_verba,
+                    fallback_descricao=l.verba.descricao if l.verba else "",
+                    fallback_tipo=l.verba.tipo_codigo if l.verba else "Provento",
+                )
+                val_t = Decimal(str(l.valor))
+                todas_verbas_colab.append({
+                    "codigo": info_t["codigo"],
+                    "codigo_original": l.codigo_verba,
+                    "descricao": info_t["descricao"],
+                    "tipo": info_t["tipo"],
+                    "valor": float(val_t),
+                    "dt_arq": str(l.dt_arq),
+                })
+            todas_verbas_colab.sort(key=lambda x: x["valor"], reverse=True)
+
+            lista_colabs.append({
                 "matricula": mat,
                 "nome": nome,
-                "valor": float(item["total"]),
+                "valor": float(valor_calculado),
+                "total_proventos": float(tot_proventos),
+                "total_descontos": float(tot_descontos),
+                "total_base": float(tot_base),
+                "quantidade_verbas": len(verbas_detalhe),
+                "verbas": verbas_detalhe,
+                "todas_verbas": todas_verbas_colab,
             })
-        return lista
 
-    resultado.colaboradores_salario = formatar_lista_colabs(linhas_salario)
-    resultado.colaboradores_insalubridade = formatar_lista_colabs(linhas_insalubridade)
-    resultado.colaboradores_adicional_noturno = formatar_lista_colabs(linhas_adicional_noturno)
-    resultado.colaboradores_verbas_extraordinarias = formatar_lista_colabs(linhas_extraordinarias)
+        lista_colabs.sort(key=lambda x: x["valor"], reverse=True)
+        return lista_colabs
+
+    resultado.colaboradores_salario = processar_detalhe_colaboradores(linhas_salario_lista)
+    resultado.colaboradores_insalubridade = processar_detalhe_colaboradores(linhas_insalubridade_lista)
+    resultado.colaboradores_adicional_noturno = processar_detalhe_colaboradores(linhas_adicional_noturno_lista)
+    resultado.colaboradores_verbas_extraordinarias = processar_detalhe_colaboradores(linhas_extraordinarias_lista)
 
     return resultado

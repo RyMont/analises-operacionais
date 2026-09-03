@@ -42,10 +42,13 @@ Thumbs.db
 # Inicializador local de testes
 iniciar_projeto.bat
 
-# Arquivos de dados locais
+# Arquivos de dados locais e fixtures com dados internos
 *.csv
 *.xml
 *.xlsx
 *.xls
 *.xlsm
+lojas/fixtures/de_para_verbas.json
+!lojas/fixtures/de_para_verbas.json.example
+
 

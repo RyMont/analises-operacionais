@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { Loader2, X, AlertCircle, FileText, CalendarCheck, TrendingUp, Calculator, Scale, Info, ChevronDown, ChevronUp, User, Sparkles } from 'lucide-react';
+import { Loader2, X, AlertCircle, FileText, CalendarCheck, TrendingUp, Calculator, Scale, Info, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import api from '../../api/client';
 import { formatCurrency } from '../../utils/formatters';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside';
+import TabelaColaboradoresRubrica, { type ColaboradorRubrica } from './TabelaColaboradoresRubrica';
 
 export interface ResultadoComparativo {
   loja: {
@@ -32,10 +33,10 @@ export interface ResultadoComparativo {
   tabela_escopo_total: string;
   tabela_folha_total: string;
   tabela_desvio_total: string;
-  colaboradores_salario?: { matricula: string; nome: string; valor: number }[];
-  colaboradores_insalubridade?: { matricula: string; nome: string; valor: number }[];
-  colaboradores_adicional_noturno?: { matricula: string; nome: string; valor: number }[];
-  colaboradores_verbas_extraordinarias?: { matricula: string; nome: string; valor: number }[];
+  colaboradores_salario?: ColaboradorRubrica[];
+  colaboradores_insalubridade?: ColaboradorRubrica[];
+  colaboradores_adicional_noturno?: ColaboradorRubrica[];
+  colaboradores_verbas_extraordinarias?: ColaboradorRubrica[];
 }
 
 interface ComparativoDetalheModalProps {
@@ -241,36 +242,10 @@ export default function ComparativoDetalheModal({
                       {expandedCategories['salario'] && (
                         <tr>
                           <td colSpan={4} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-800">
-                            <div className="p-4 md:px-8 space-y-2">
-                              <h4 className="text-[10px] font-bold text-neutral-450 uppercase tracking-wider flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5" />
-                                Detalhamento de Salário Base por Colaborador
-                              </h4>
-                              {resultado.colaboradores_salario && resultado.colaboradores_salario.length > 0 ? (
-                                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-w-2xl bg-white dark:bg-neutral-900 shadow-xs">
-                                  <table className="w-full text-left border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 text-neutral-450 font-extrabold uppercase tracking-wider">
-                                        <th className="p-2 w-28">Matrícula</th>
-                                        <th className="p-2">Nome</th>
-                                        <th className="p-2 text-right w-32">Valor Recebido</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
-                                      {resultado.colaboradores_salario.map((colab: any) => (
-                                        <tr key={colab.matricula} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/50">
-                                          <td className="p-2 font-mono">{colab.matricula}</td>
-                                          <td className="p-2 font-semibold text-neutral-900 dark:text-neutral-100">{colab.nome}</td>
-                                          <td className="p-2 text-right font-mono">{formatCurrency(colab.valor.toString())}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-neutral-455 italic py-1">Nenhum colaborador com lançamentos nesta categoria.</p>
-                              )}
-                            </div>
+                            <TabelaColaboradoresRubrica
+                              colaboradores={resultado.colaboradores_salario}
+                              categoriaNome="Salário Base"
+                            />
                           </td>
                         </tr>
                       )}
@@ -296,36 +271,10 @@ export default function ComparativoDetalheModal({
                       {expandedCategories['insalubridade'] && (
                         <tr>
                           <td colSpan={4} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-800">
-                            <div className="p-4 md:px-8 space-y-2">
-                              <h4 className="text-[10px] font-bold text-neutral-455 uppercase tracking-wider flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5" />
-                                Detalhamento de Insalubridade por Colaborador
-                              </h4>
-                              {resultado.colaboradores_insalubridade && resultado.colaboradores_insalubridade.length > 0 ? (
-                                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-w-2xl bg-white dark:bg-neutral-900 shadow-xs">
-                                  <table className="w-full text-left border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 text-neutral-450 font-extrabold uppercase tracking-wider">
-                                        <th className="p-2 w-28">Matrícula</th>
-                                        <th className="p-2">Nome</th>
-                                        <th className="p-2 text-right w-32">Valor Recebido</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
-                                      {resultado.colaboradores_insalubridade.map((colab: any) => (
-                                        <tr key={colab.matricula} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/50">
-                                          <td className="p-2 font-mono">{colab.matricula}</td>
-                                          <td className="p-2 font-semibold text-neutral-900 dark:text-neutral-100">{colab.nome}</td>
-                                          <td className="p-2 text-right font-mono">{formatCurrency(colab.valor.toString())}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-neutral-455 italic py-1">Nenhum colaborador com lançamentos nesta categoria.</p>
-                              )}
-                            </div>
+                            <TabelaColaboradoresRubrica
+                              colaboradores={resultado.colaboradores_insalubridade}
+                              categoriaNome="Insalubridade"
+                            />
                           </td>
                         </tr>
                       )}
@@ -351,36 +300,10 @@ export default function ComparativoDetalheModal({
                       {expandedCategories['adicional_noturno'] && (
                         <tr>
                           <td colSpan={4} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-800">
-                            <div className="p-4 md:px-8 space-y-2">
-                              <h4 className="text-[10px] font-bold text-neutral-455 uppercase tracking-wider flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5" />
-                                Detalhamento de Adicional Noturno por Colaborador
-                              </h4>
-                              {resultado.colaboradores_adicional_noturno && resultado.colaboradores_adicional_noturno.length > 0 ? (
-                                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-w-2xl bg-white dark:bg-neutral-900 shadow-xs">
-                                  <table className="w-full text-left border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 text-neutral-450 font-extrabold uppercase tracking-wider">
-                                        <th className="p-2 w-28">Matrícula</th>
-                                        <th className="p-2">Nome</th>
-                                        <th className="p-2 text-right w-32">Valor Recebido</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
-                                      {resultado.colaboradores_adicional_noturno.map((colab: any) => (
-                                        <tr key={colab.matricula} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/50">
-                                          <td className="p-2 font-mono">{colab.matricula}</td>
-                                          <td className="p-2 font-semibold text-neutral-900 dark:text-neutral-100">{colab.nome}</td>
-                                          <td className="p-2 text-right font-mono">{formatCurrency(colab.valor.toString())}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-neutral-455 italic py-1">Nenhum colaborador com lançamentos nesta categoria.</p>
-                              )}
-                            </div>
+                            <TabelaColaboradoresRubrica
+                              colaboradores={resultado.colaboradores_adicional_noturno}
+                              categoriaNome="Adicional Noturno"
+                            />
                           </td>
                         </tr>
                       )}
@@ -406,36 +329,10 @@ export default function ComparativoDetalheModal({
                       {expandedCategories['verbas_extraordinarias'] && (
                         <tr>
                           <td colSpan={4} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-800">
-                            <div className="p-4 md:px-8 space-y-2">
-                              <h4 className="text-[10px] font-bold text-neutral-455 uppercase tracking-wider flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5" />
-                                Detalhamento de Verbas Extraordinárias por Colaborador
-                              </h4>
-                              {resultado.colaboradores_verbas_extraordinarias && resultado.colaboradores_verbas_extraordinarias.length > 0 ? (
-                                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-w-2xl bg-white dark:bg-neutral-900 shadow-xs">
-                                  <table className="w-full text-left border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850 text-neutral-450 font-extrabold uppercase tracking-wider">
-                                        <th className="p-2 w-28">Matrícula</th>
-                                        <th className="p-2">Nome</th>
-                                        <th className="p-2 text-right w-32">Valor Recebido</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
-                                      {resultado.colaboradores_verbas_extraordinarias.map((colab: any) => (
-                                        <tr key={colab.matricula} className="hover:bg-neutral-50 dark:hover:bg-neutral-850/50">
-                                          <td className="p-2 font-mono">{colab.matricula}</td>
-                                          <td className="p-2 font-semibold text-neutral-900 dark:text-neutral-100">{colab.nome}</td>
-                                          <td className="p-2 text-right font-mono">{formatCurrency(colab.valor.toString())}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-neutral-455 italic py-1">Nenhum colaborador com lançamentos nesta categoria.</p>
-                              )}
-                            </div>
+                            <TabelaColaboradoresRubrica
+                              colaboradores={resultado.colaboradores_verbas_extraordinarias}
+                              categoriaNome="Verbas Extraordinárias"
+                            />
                           </td>
                         </tr>
                       )}
