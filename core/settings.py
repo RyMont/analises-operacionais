@@ -21,6 +21,9 @@ ALLOWED_HOSTS = DEFAULT_ALLOWED_HOSTS + config(
     cast=Csv(),
 )
 
+# Caminho da planilha de De-Para de Verbas (opcional)
+PLANILHA_VERBAS_PATH = config("PLANILHA_VERBAS_PATH", default="").strip('\'"')
+
 # Configuração de Limites de Upload (Evita erro 400 Bad Request em arquivos grandes)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB

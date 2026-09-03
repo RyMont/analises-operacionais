@@ -4,6 +4,7 @@ import api from '../../api/client';
 import { formatCurrency } from '../../utils/formatters';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside';
 import TabelaColaboradoresRubrica, { type ColaboradorRubrica } from './TabelaColaboradoresRubrica';
+import GraficoProporcaoVerbasLoja from './GraficoProporcaoVerbasLoja';
 
 export interface ResultadoComparativo {
   loja: {
@@ -207,6 +208,9 @@ export default function ComparativoDetalheModal({
                   </span>
                 </div>
               </div>
+
+              {/* Gráfico de Proporção por Tipo de Verba */}
+              <GraficoProporcaoVerbasLoja resultado={resultado} />
 
               {/* Tabela de Rubricas */}
               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden shadow-xs">
