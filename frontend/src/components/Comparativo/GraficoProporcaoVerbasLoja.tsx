@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { PieChart as PieIcon, Layers, ListFilter } from 'lucide-react';
+import { PieChart as PieIcon } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import type { ResultadoComparativo } from './ComparativoDetalheModal';
 
@@ -26,13 +26,18 @@ const CORES_CATEGORIAS = {
 
 // Paleta estendida para rubricas individuais
 const CORES_RUBRICAS = [
-  '#3b82f6', // Azul
+  '#3b82f6', // Azul Índigo
   '#10b981', // Verde Esmeralda
   '#f59e0b', // Âmbar
   '#8b5cf6', // Violeta
   '#ec4899', // Rosa
   '#06b6d4', // Ciano
   '#f97316', // Laranja
+  '#14b8a6', // Teal
+  '#6366f1', // Índigo
+  '#84cc16', // Lima
+  '#a855f7', // Roxo
+  '#e11d48', // Carmesim
   '#64748b', // Ardósia (Outras)
 ];
 
@@ -72,92 +77,48 @@ const CustomTooltipProporcao = ({ active, payload }: any) => {
 export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporcaoVerbasLojaProps) {
   // Modo de visualização: Realizado (Folha) vs Orçado (Escopo)
   const [origemDados, setOrigemDados] = useState<'folha' | 'escopo'>('folha');
-  // Visão detalhada (apenas para Folha): Categorias Macro vs Rubricas Individuais
-  const [tipoAgrupamento, setTipoAgrupamento] = useState<'categoria' | 'rubricas'>('categoria');
   // Índice ativo em foco (hover)
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // 1. Dados por Categoria (Realizado vs Orçado)
+  // 1. Dados por Categoria (utilizado apenas se Orçado for selecionado)
   const dadosCategorias = useMemo(() => {
-    if (origemDados === 'folha') {
-      const vSalario = Math.max(0, parseFloat(resultado.folha_salario_categoria_total || '0'));
-      const vInsalubridade = Math.max(0, parseFloat(resultado.folha_insalubridade_categoria_total || '0'));
-      const vAdicional = Math.max(0, parseFloat(resultado.folha_adicional_noturno_categoria_total || '0'));
-      const vExtras = Math.max(0, parseFloat(resultado.folha_verbas_extraordinarias_categoria_total || '0'));
+    // Escopo Orçado
+    const vSalario = Math.max(0, parseFloat(resultado.escopo_base_total || '0'));
+    const vInsalubridade = Math.max(0, parseFloat(resultado.escopo_insalubridade_total || '0'));
+    const vAdicional = Math.max(0, parseFloat(resultado.escopo_adicional_noturno_total || '0'));
+    const totalEscopo = Math.max(
+      vSalario + vInsalubridade + vAdicional,
+      parseFloat(resultado.escopo_total || '0')
+    );
 
-      const totalCalculado = vSalario + vInsalubridade + vAdicional + vExtras;
-      const totalFolha = Math.max(totalCalculado, parseFloat(resultado.folha_total || '0'));
+    const itens: ItemProporcao[] = [
+      {
+        nome: 'Salário Base (Estimado)',
+        valor: vSalario,
+        percentual: totalEscopo > 0 ? (vSalario / totalEscopo) * 100 : 0,
+        cor: CORES_CATEGORIAS.salario,
+      },
+      {
+        nome: 'Insalubridade (Estimada)',
+        valor: vInsalubridade,
+        percentual: totalEscopo > 0 ? (vInsalubridade / totalEscopo) * 100 : 0,
+        cor: CORES_CATEGORIAS.insalubridade,
+      },
+      {
+        nome: 'Adicional Noturno (Estimado)',
+        valor: vAdicional,
+        percentual: totalEscopo > 0 ? (vAdicional / totalEscopo) * 100 : 0,
+        cor: CORES_CATEGORIAS.adicional_noturno,
+      },
+    ];
 
-      const itens: ItemProporcao[] = [
-        {
-          nome: 'Salário Base',
-          valor: vSalario,
-          percentual: totalFolha > 0 ? (vSalario / totalFolha) * 100 : 0,
-          cor: CORES_CATEGORIAS.salario,
-        },
-        {
-          nome: 'Insalubridade',
-          valor: vInsalubridade,
-          percentual: totalFolha > 0 ? (vInsalubridade / totalFolha) * 100 : 0,
-          cor: CORES_CATEGORIAS.insalubridade,
-        },
-        {
-          nome: 'Adicional Noturno',
-          valor: vAdicional,
-          percentual: totalFolha > 0 ? (vAdicional / totalFolha) * 100 : 0,
-          cor: CORES_CATEGORIAS.adicional_noturno,
-        },
-        {
-          nome: 'Verbas Extraordinárias',
-          valor: vExtras,
-          percentual: totalFolha > 0 ? (vExtras / totalFolha) * 100 : 0,
-          cor: CORES_CATEGORIAS.verbas_extraordinarias,
-        },
-      ];
+    return {
+      itens,
+      total: totalEscopo,
+    };
+  }, [resultado]);
 
-      return {
-        itens,
-        total: totalFolha,
-      };
-    } else {
-      // Escopo Orçado
-      const vSalario = Math.max(0, parseFloat(resultado.escopo_base_total || '0'));
-      const vInsalubridade = Math.max(0, parseFloat(resultado.escopo_insalubridade_total || '0'));
-      const vAdicional = Math.max(0, parseFloat(resultado.escopo_adicional_noturno_total || '0'));
-      const totalEscopo = Math.max(
-        vSalario + vInsalubridade + vAdicional,
-        parseFloat(resultado.escopo_total || '0')
-      );
-
-      const itens: ItemProporcao[] = [
-        {
-          nome: 'Salário Base (Estimado)',
-          valor: vSalario,
-          percentual: totalEscopo > 0 ? (vSalario / totalEscopo) * 100 : 0,
-          cor: CORES_CATEGORIAS.salario,
-        },
-        {
-          nome: 'Insalubridade (Estimada)',
-          valor: vInsalubridade,
-          percentual: totalEscopo > 0 ? (vInsalubridade / totalEscopo) * 100 : 0,
-          cor: CORES_CATEGORIAS.insalubridade,
-        },
-        {
-          nome: 'Adicional Noturno (Estimado)',
-          valor: vAdicional,
-          percentual: totalEscopo > 0 ? (vAdicional / totalEscopo) * 100 : 0,
-          cor: CORES_CATEGORIAS.adicional_noturno,
-        },
-      ];
-
-      return {
-        itens,
-        total: totalEscopo,
-      };
-    }
-  }, [resultado, origemDados]);
-
-  // 2. Dados por Rubrica Detalhada (agrupamento individual da folha)
+  // 2. Dados por Rubrica Detalhada (padrão principal da folha realizada sem agrupamento forçado)
   const dadosRubricas = useMemo(() => {
     if (origemDados !== 'folha') {
       return { itens: [], total: 0 };
@@ -174,7 +135,8 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
     listas.forEach(colabs => {
       colabs.forEach(colab => {
         (colab.verbas || []).forEach(v => {
-          const chave = v.codigo ? `${v.codigo} - ${v.descricao}` : v.descricao;
+          const codFormatado = v.codigo ? String(v.codigo).padStart(3, '0') : '';
+          const chave = codFormatado || v.descricao;
           const valor = Number(v.valor) || 0;
           if (valor <= 0) return;
 
@@ -182,9 +144,12 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
           if (atual) {
             atual.total += valor;
           } else {
+            const rotulo = v.descricao
+              ? (codFormatado ? `${codFormatado} — ${v.descricao}` : v.descricao)
+              : chave;
             mapaRubricas.set(chave, {
-              nome: v.descricao || chave,
-              codigo: v.codigo || '',
+              nome: rotulo,
+              codigo: codFormatado,
               total: valor,
             });
           }
@@ -195,9 +160,9 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
     const ordenados = Array.from(mapaRubricas.values()).sort((a, b) => b.total - a.total);
     const totalFolha = ordenados.reduce((acc, cur) => acc + cur.total, 0);
 
-    // Se houver mais de 5 rubricas, isolamos as 5 maiores e agrupamos o restante em "Outras Rubricas"
+    // Permite exibir até 10 rubricas individuais com suas próprias cores antes de agrupar o excedente
     const itensFinais: ItemProporcao[] = [];
-    const maxTop = 5;
+    const maxTop = 10;
     const topItens = ordenados.slice(0, maxTop);
     const demais = ordenados.slice(maxTop);
 
@@ -227,9 +192,9 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
     };
   }, [resultado, origemDados]);
 
-  // Escolhe quais dados serão passados para a visualização
+  // Escolhe os dados: na Folha, utiliza SEMPRE as rubricas individuais sem agrupamento
   const dadosAtivos =
-    origemDados === 'folha' && tipoAgrupamento === 'rubricas' && dadosRubricas.itens.length > 0
+    origemDados === 'folha' && dadosRubricas.itens.length > 0
       ? dadosRubricas
       : dadosCategorias;
 
@@ -250,16 +215,16 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
               <PieIcon className="h-4 w-4" />
             </div>
             <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-800 dark:text-neutral-200">
-              Proporção por Tipo de Verba
+              Proporção por Rubrica
             </h3>
           </div>
           <p className="text-[11px] text-neutral-500 font-medium mt-1">
-            Distribuição percentual de cada rubrica em relação ao custo total da filial
+            Distribuição percentual de cada rubrica individual em relação ao custo total da filial
           </p>
         </div>
 
         {/* Controles de Alternância */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           {/* Alternância Realizado vs Orçado */}
           <div className="inline-flex rounded-xl bg-neutral-100 dark:bg-neutral-800 p-0.5 text-xs font-semibold">
             <button
@@ -285,38 +250,6 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
               Orçado (Escopo)
             </button>
           </div>
-
-          {/* Alternância Categoria vs Rubricas Específicas (apenas se Folha selecionada) */}
-          {origemDados === 'folha' && dadosRubricas.itens.length > 0 && (
-            <div className="inline-flex rounded-xl bg-neutral-100 dark:bg-neutral-800 p-0.5 text-[11px] font-semibold">
-              <button
-                type="button"
-                onClick={() => setTipoAgrupamento('categoria')}
-                title="Visualizar pelas 4 categorias macro"
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                  tipoAgrupamento === 'categoria'
-                    ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50 shadow-xs font-bold'
-                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
-                }`}
-              >
-                <Layers className="h-3 w-3" />
-                <span>Categorias</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTipoAgrupamento('rubricas')}
-                title="Visualizar por rubricas detalhadas individuais"
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                  tipoAgrupamento === 'rubricas'
-                    ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50 shadow-xs font-bold'
-                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
-                }`}
-              >
-                <ListFilter className="h-3 w-3" />
-                <span>Rubricas</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -382,7 +315,7 @@ export default function GraficoProporcaoVerbasLoja({ resultado }: GraficoProporc
           </div>
 
           {/* Lado Direito: Barras de Progresso e Percentuais */}
-          <div className="md:col-span-7 space-y-2.5">
+          <div className="md:col-span-7 space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
             {dadosAtivos.itens.map((item, index) => {
               const isHovered = activeIndex === index;
               return (
