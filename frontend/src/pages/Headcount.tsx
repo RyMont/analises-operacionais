@@ -80,7 +80,7 @@ export default function Headcount() {
   const [colaboradoresDia, setColaboradoresDia] = useState<ColaboradorPresenca[]>([]);
   const [loadingColaboradores, setLoadingColaboradores] = useState(false);
   const [syncingRecente, setSyncingRecente] = useState(false);
-  const [syncingLojas, setSyncingLojas] = useState<Record<string, boolean>>({});
+  const [syncingLoja30, setSyncingLoja30] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(modalRef, () => setSelectedLoja(null));
 
@@ -169,10 +169,10 @@ export default function Headcount() {
     }
   };
 
-  // Dispara a sincronização individual de uma loja nos últimos 3 dias
-  const handleSyncLoja = async (lojaId: string) => {
-    setSyncingLojas(prev => ({ ...prev, [lojaId]: true }));
-    const toastId = toast.loading('Sincronizando batidas dos últimos 3 dias para esta loja...');
+  // Dispara a sincronização individual de uma loja nos últimos 30 dias a partir do modal
+  const handleSyncLoja30Dias = async (lojaId: string) => {
+    setSyncingLoja30(true);
+    const toastId = toast.loading('Sincronizando batidas dos últimos 30 dias para esta loja...');
 
     const interval = setInterval(async () => {
       try {
@@ -187,16 +187,19 @@ export default function Headcount() {
     }, 800);
 
     try {
-      await api.post(`/lojas/api/presencas/sincronizar-loja/${lojaId}/`);
+      await api.post(`/lojas/api/presencas/sincronizar-loja/${lojaId}/`, { dias: 30 });
       clearInterval(interval);
-      toast.success('Sincronização da loja concluída com sucesso!', { id: toastId });
+      toast.success('Sincronização dos últimos 30 dias concluída com sucesso!', { id: toastId });
       fetchHeadcount();
+      if (selectedLoja) {
+        fetchCalendario(selectedLoja.id, anoMes);
+      }
     } catch (err) {
       clearInterval(interval);
       console.error('Erro ao disparar sincronização da loja:', err);
-      toast.error('Falha ao sincronizar batidas recentes desta loja.', { id: toastId });
+      toast.error('Falha ao sincronizar batidas dos últimos 30 dias desta loja.', { id: toastId });
     } finally {
-      setSyncingLojas(prev => ({ ...prev, [lojaId]: false }));
+      setSyncingLoja30(false);
     }
   };
 
@@ -457,7 +460,6 @@ export default function Headcount() {
                     )}
                   </div>
                 </th>
-                <th className="py-4 px-6 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-850">
@@ -471,12 +473,11 @@ export default function Headcount() {
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-8 mx-auto" /></td>
-                    <td className="py-4 px-6"><div className="h-6 bg-neutral-100 dark:bg-neutral-800 rounded w-24 mx-auto" /></td>
                   </tr>
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400 italic">
+                  <td colSpan={7} className="py-12 text-center text-neutral-400 italic">
                     Nenhuma loja ativa encontrada para os filtros aplicados.
                   </td>
                 </tr>
@@ -515,17 +516,6 @@ export default function Headcount() {
                     </td>
                     <td className="py-4 px-4 text-center font-bold text-neutral-900 dark:text-neutral-100">
                       {row.presencas_ultimo_dia}
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      <button
-                        onClick={() => handleSyncLoja(row.loja_id)}
-                        disabled={syncingLojas[row.loja_id]}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-850 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 text-[10px] font-bold rounded-lg transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed border border-neutral-200 dark:border-neutral-800 shadow-xs"
-                        title="Sincronizar batidas dos últimos 3 dias desta loja"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${syncingLojas[row.loja_id] ? 'animate-spin' : ''}`} />
-                        Sincronizar 3d
-                      </button>
                     </td>
                   </tr>
                 ))
@@ -597,18 +587,32 @@ export default function Headcount() {
                 />
               </div>
 
-              {selectedLoja && (() => {
-                const lojaInfo = data.find(row => row.loja_id === selectedLoja.id);
-                return lojaInfo ? (
-                  <div className="text-[11px] text-neutral-500 font-medium flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-neutral-400" />
-                    <span>Última Sincronização:</span>
-                    <span className="font-bold text-neutral-700 dark:text-neutral-300">
-                      {formatarDataSincronizacao(lojaInfo.geovictoria_sincronizado_em)}
-                    </span>
-                  </div>
-                ) : null;
-              })()}
+              <div className="flex flex-wrap items-center gap-3">
+                {selectedLoja && (() => {
+                  const lojaInfo = data.find(row => row.loja_id === selectedLoja.id);
+                  return lojaInfo ? (
+                    <div className="text-[11px] text-neutral-500 font-medium flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-neutral-400" />
+                      <span>Última Sincronização:</span>
+                      <span className="font-bold text-neutral-700 dark:text-neutral-300">
+                        {formatarDataSincronizacao(lojaInfo.geovictoria_sincronizado_em)}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
+
+                {selectedLoja && (
+                  <button
+                    onClick={() => handleSyncLoja30Dias(selectedLoja.id)}
+                    disabled={syncingLoja30}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-active text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed"
+                    title="Sincronizar batidas dos últimos 30 dias desta filial"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncingLoja30 ? 'animate-spin' : ''}`} />
+                    {syncingLoja30 ? 'Sincronizando 30d...' : 'Sincronizar Últimos 30 Dias'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Corpo do Modal em Duas Colunas */}

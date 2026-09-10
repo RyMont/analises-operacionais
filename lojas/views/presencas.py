@@ -107,18 +107,23 @@ def lojas_presencas_sincronizar_geral_api(request):
 @permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
 def loja_presencas_sincronizar_individual_api(request, loja_id):
     """
-    Por que existe: Sincroniza em tempo real as batidas dos últimos 3 dias para uma loja específica.
+    Por que existe: Sincroniza em tempo real as batidas dos últimos N dias (padrão: 30 dias) para uma loja específica.
     """
     from colaboradores.services.geovictoria_punches_sync import sincronizar_punches_api
     
+    try:
+        dias = int(request.data.get("dias") or request.GET.get("dias") or 30)
+    except (ValueError, TypeError):
+        dias = 30
+
     fim = date.today()
-    inicio = fim - timedelta(days=3)
+    inicio = fim - timedelta(days=dias)
 
     try:
         res = sincronizar_punches_api(inicio, fim, loja_id=loja_id)
         return Response({
             "success": True,
-            "message": f"Sincronização individual dos últimos 3 dias concluída com sucesso!",
+            "message": f"Sincronização individual dos últimos {dias} dias concluída com sucesso!",
             "dados": res
         }, status=status.HTTP_200_OK)
     except Exception as e:

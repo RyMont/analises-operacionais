@@ -61,6 +61,10 @@ urlpatterns = [
     path("comparativo/relatorio/", views.comparativo_relatorio_api, name="comparativo_relatorio_api"),
     path("comparativo/relatorio/exportar/", views.comparativo_relatorio_exportar_excel, name="comparativo_relatorio_exportar"),
     path("comparativo/filtro-opcoes/", views.comparativo_filtro_opcoes_api, name="comparativo_filtro_opcoes"),
+    path("comparativo/por-verba/", views.comparativo_por_verba_api, name="comparativo_por_verba_api"),
+    path("comparativo/por-verba/detalhes/", views.comparativo_por_verba_detalhe_api, name="comparativo_por_verba_detalhes"),
+    path("comparativo/por-verba/exportar/", views.comparativo_por_verba_exportar_excel, name="comparativo_por_verba_exportar"),
+    path("comparativo/verbas-opcoes/", views.comparativo_verbas_opcoes_api, name="comparativo_verbas_opcoes"),
     
     # ========== CALENDÁRIO DE PRESENÇAS GEOVICTORIA ==========
     path("lojas/api/presencas/calendario/<int:loja_id>/", views.loja_presencas_calendario_api, name="loja_presencas_calendario"),

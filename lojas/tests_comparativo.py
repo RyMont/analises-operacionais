@@ -448,6 +448,83 @@ class ComparativoViewsTests(TestCase):
         self.assertEqual(res_api["desvio_verbas_extraordinarias"], "450.00")
         self.assertEqual(len(res_api["colaboradores_verbas_extraordinarias"]), 1)
 
+    def test_comparativo_por_verba_api(self):
+        """Valida endpoint analítico de comparativo por verba com KPIs e gráficos."""
+        response = self.client.get("/comparativo/por-verba/", {"period": "2026-03"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertIn("kpis", data)
+        self.assertIn("graficos", data)
+        self.assertIn("top_lojas", data["graficos"])
+        self.assertIn("resultados", data)
+        self.assertGreater(data["kpis"]["total_realizado"], 0)
+        self.assertGreaterEqual(data["kpis"]["total_verbas"], 1)
+
+    def test_comparativo_por_verba_detalhe_api(self):
+        """Valida endpoint de detalhamento por filial e colaborador para uma verba."""
+        response = self.client.get("/comparativo/por-verba/detalhes/", {"codigo": "001", "period": "2026-03"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertIn("lojas", data)
+        self.assertIn("colaboradores", data)
+        self.assertEqual(data["codigo"], "001")
+
+    def test_comparativo_por_verba_exportar_excel(self):
+        """Valida exportação em Excel das verbas filtradas."""
+        response = self.client.get("/comparativo/por-verba/exportar/", {"period": "2026-03"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    def test_comparativo_verbas_opcoes_api(self):
+        """Valida listagem de opções da base de verbas para o filtro."""
+        response = self.client.get("/comparativo/verbas-opcoes/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertGreater(len(response.data), 0)
+
+    def test_comparativo_por_verba_harmonizacao_opcao_b(self):
+        """
+        Por que existe: Valida a Opção B de harmonização entre Aba Geral e Aba Por Verba.
+        Sem filtro de verba, soma apenas verbas com considerar_na_contagem=True (igual à Aba Geral).
+        Com filtro de verba, permite auditar o valor total daquela verba mesmo que considerar_na_contagem=False.
+        """
+        # Cria verba com considerar_na_contagem=False (ex: férias)
+        verba_ferias = Verba.objects.create(
+            codigo_verba="300",
+            descricao="FERIAS",
+            tipo_codigo="PROVENTO",
+            considerar_na_contagem=False,
+            categoria="FERIAS",
+        )
+        LinhaFolha.objects.create(
+            matricula="RE003",
+            verba=verba_ferias,
+            codigo_verba="300",
+            valor=Decimal("1200.00"),
+            dt_arq=date(2026, 3, 1),
+            dt_pagamento=date(2026, 3, 30),
+            centro_custo="123456789012",
+            centro_custo_real="123456789012",
+            loja=self.loja,
+            categoria="FERIAS",
+        )
+
+        # 1. Consulta geral sem filtro de verba: deve ignorar os 1200.00 de férias e manter apenas os 1600.00 de salário (considerar=True)
+        resp_sem_filtro = self.client.get("/comparativo/por-verba/", {"period": "2026-03"})
+        self.assertEqual(resp_sem_filtro.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_sem_filtro.data["kpis"]["total_realizado"], 1600.0)
+
+        # 2. Consulta filtrando pela verba 300: deve retornar especificamente os 1200.00
+        resp_com_filtro = self.client.get("/comparativo/por-verba/", {"period": "2026-03", "verba": "300"})
+        self.assertEqual(resp_com_filtro.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_com_filtro.data["kpis"]["total_realizado"], 1200.0)
+        self.assertEqual(len(resp_com_filtro.data["resultados"]), 1)
+        self.assertEqual(resp_com_filtro.data["resultados"][0]["codigo"], "300")
+
+
 
 
 

@@ -23,11 +23,13 @@ from lojas.models import (
     ItemEscopoMensal,
     LinhaFolha,
     ResumoFolhaMensal,
+    Verba,
     ConfiguracaoInsalubridadeLoja,
     obter_ou_criar_config_insalubridade_loja,
     escala_insalubridade_fixa_para_escopo,
     montar_caches_salario_para_itens,
 )
+from lojas.services.verbas_de_para import obter_info_verba
 from lojas.serializers import LojaSerializer
 
 _FILTROS_CACHE = None
@@ -105,11 +107,29 @@ def comparativo_filtro_opcoes_api(request):
             "label": f"{_nome_mes(mes)} / {ano}"
         })
         
+    # Coleta todas as verbas cadastradas na base de verbas
+    verbas_opcoes = []
+    visto = set()
+    for v in Verba.objects.all().order_by("codigo_verba"):
+        cod_pad = str(v.codigo_verba).strip()
+        cod_pad = cod_pad.zfill(3) if cod_pad.isdigit() else cod_pad
+        if cod_pad in visto:
+            continue
+        visto.add(cod_pad)
+        info = obter_info_verba(cod_pad)
+        desc = info.get("descricao") or v.descricao or ""
+        verbas_opcoes.append({
+            "value": cod_pad,
+            "label": f"{cod_pad} — {desc}"
+        })
+    verbas_opcoes.sort(key=lambda x: x["value"])
+
     response_data = {
         "supervisores": supervisores,
         "coordenadores": coordenadores,
         "ufs": ufs,
-        "competencias": competencias_opcoes
+        "competencias": competencias_opcoes,
+        "verbas": verbas_opcoes,
     }
     
     _FILTROS_CACHE = response_data

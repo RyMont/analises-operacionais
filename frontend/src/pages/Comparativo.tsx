@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, TrendingUp, Receipt } from 'lucide-react';
 import api, { getBackendPort } from '../api/client';
 import ComparativoFilter from '../components/Comparativo/ComparativoFilter';
 import ComparativoTable, { type ComparativoLinhaData } from '../components/Comparativo/ComparativoTable';
 import ComparativoKPIs from '../components/Comparativo/ComparativoKPIs';
 import ComparativoCharts from '../components/Comparativo/ComparativoCharts';
 import ComparativoDetalheModal from '../components/Comparativo/ComparativoDetalheModal';
+import ComparativoPorVerba from '../components/Comparativo/ComparativoPorVerba';
 
 interface LojaRef {
   id: string;
@@ -30,6 +31,7 @@ interface FiltroOpcoes {
   coordenadores: string[];
   ufs: string[];
   competencias: Option[];
+  verbas?: Option[];
 }
 
 /**
@@ -40,6 +42,7 @@ interface FiltroOpcoes {
  * gráficos do BI, filtros reativos e a listagem de filiais com paginação.
  */
 export default function Comparativo() {
+  const [activeTab, setActiveTab] = useState<'geral' | 'por_verba'>('geral');
   const [lojasOpcoes, setLojasOpcoes] = useState<LojaRef[]>([]);
   
   // Opções para preencher os filtros (coletadas do pai)
@@ -238,58 +241,94 @@ export default function Comparativo() {
         <p className="text-sm text-neutral-500 font-medium">Análise consolidada de custos orçados pelo escopo contra os dados reais da folha de pagamento</p>
       </div>
 
-      {errorMsg && (
-        <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 rounded-lg text-sm flex gap-3 items-center">
-          <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
+      {/* Navegação por Abas (Tabs) no estilo de Colaboradores */}
+      <div className="border-b border-neutral-200 dark:border-neutral-800 flex gap-4">
+        <button
+          onClick={() => setActiveTab('geral')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'geral'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-300'
+          }`}
+        >
+          <TrendingUp className="h-4 w-4" />
+          Geral
+        </button>
+        <button
+          onClick={() => setActiveTab('por_verba')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'por_verba'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-300'
+          }`}
+        >
+          <Receipt className="h-4 w-4" />
+          Por Verba
+        </button>
+      </div>
+
+      {activeTab === 'geral' ? (
+        <>
+          {errorMsg && (
+            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 rounded-lg text-sm flex gap-3 items-center">
+              <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Seção de Filtros */}
+          <ComparativoFilter
+            filtros={filtros}
+            onApplyFilters={handleApplyFilters}
+            lojasOpcoes={lojasOpcoes}
+            opcoesFiltros={opcoesFiltros}
+            loadingFiltros={loadingFiltros}
+            onClear={handleLimparFiltros}
+          />
+
+          {/* Relatório e Gráficos */}
+          <main className="space-y-6">
+            {/* KPIs */}
+            <ComparativoKPIs kpis={kpis} loadingData={loadingData} />
+
+            {/* Gráficos de Evolução, Coordenador e UF */}
+            <ComparativoCharts
+              loadingData={loadingData}
+              graficos={graficos}
+              setFiltroCoordenador={handleSetFiltroCoordenador}
+              setFiltroUf={handleSetFiltroUf}
+              setCurrentPage={setCurrentPage}
+            />
+
+            {/* Tabela de Dados Paginada */}
+            <ComparativoTable
+              resultados={resultados}
+              loading={loadingData}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              setCurrentPage={setCurrentPage}
+              onVerDetalhes={handleVerDetalhes}
+              onExportarExcel={handleExportarExcel}
+            />
+          </main>
+
+          {/* Modal de Detalhes do Custo da Loja */}
+          <ComparativoDetalheModal
+            isOpen={detailModal.isOpen}
+            onClose={handleCloseDetailModal}
+            lojaId={detailModal.lojaId}
+            lojaNome={detailModal.lojaNome}
+            competencia={detailModal.competencia}
+            competenciaLabel={detailModal.competenciaLabel}
+          />
+        </>
+      ) : (
+        <ComparativoPorVerba
+          lojasOpcoes={lojasOpcoes}
+          opcoesFiltros={opcoesFiltros}
+          loadingFiltros={loadingFiltros}
+        />
       )}
-
-      {/* Seção de Filtros */}
-      <ComparativoFilter
-        filtros={filtros}
-        onApplyFilters={handleApplyFilters}
-        lojasOpcoes={lojasOpcoes}
-        opcoesFiltros={opcoesFiltros}
-        loadingFiltros={loadingFiltros}
-        onClear={handleLimparFiltros}
-      />
-
-      {/* Relatório e Gráficos */}
-      <main className="space-y-6">
-        {/* KPIs */}
-        <ComparativoKPIs kpis={kpis} loadingData={loadingData} />
-
-        {/* Gráficos de Evolução, Coordenador e UF */}
-        <ComparativoCharts
-          loadingData={loadingData}
-          graficos={graficos}
-          setFiltroCoordenador={handleSetFiltroCoordenador}
-          setFiltroUf={handleSetFiltroUf}
-          setCurrentPage={setCurrentPage}
-        />
-
-        {/* Tabela de Dados Paginada */}
-        <ComparativoTable
-          resultados={resultados}
-          loading={loadingData}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          setCurrentPage={setCurrentPage}
-          onVerDetalhes={handleVerDetalhes}
-          onExportarExcel={handleExportarExcel}
-        />
-      </main>
-
-      {/* Modal de Detalhes do Custo da Loja */}
-      <ComparativoDetalheModal
-        isOpen={detailModal.isOpen}
-        onClose={handleCloseDetailModal}
-        lojaId={detailModal.lojaId}
-        lojaNome={detailModal.lojaNome}
-        competencia={detailModal.competencia}
-        competenciaLabel={detailModal.competenciaLabel}
-      />
     </div>
   );
 }
