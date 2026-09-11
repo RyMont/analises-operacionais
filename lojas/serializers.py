@@ -268,10 +268,17 @@ class DiariaSerializer(serializers.ModelSerializer):
     preservando chaves primárias e valores numéricos como string de acordo com as regras de design.
     """
     loja_nome = serializers.CharField(source="loja.nome_referencia", read_only=True)
+    coordenador_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Diaria
         fields = "__all__"
+
+    def get_coordenador_nome(self, obj):
+        """Retorna o nome do coordenador da loja vinculada, se houver."""
+        if obj.loja and obj.loja.coordenador:
+            return obj.loja.coordenador.nome
+        return None
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

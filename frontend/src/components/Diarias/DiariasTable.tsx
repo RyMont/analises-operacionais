@@ -6,6 +6,7 @@ export interface DiariaData {
   diarista: string;
   local: string;
   loja_nome?: string;
+  coordenador_nome?: string;
   data_servico: string;
   turno: string;
   motivo: string;
@@ -23,6 +24,8 @@ interface DiariasTableProps {
   currentPage: number;
   totalPages: number;
   setCurrentPage: (page: number) => void;
+  onExportarExcel?: () => void;
+  isExporting?: boolean;
 }
 
 
@@ -73,6 +76,8 @@ export default function DiariasTable({
   currentPage,
   totalPages,
   setCurrentPage,
+  onExportarExcel,
+  isExporting = false,
 }: DiariasTableProps) {
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-sm overflow-hidden">
@@ -82,6 +87,22 @@ export default function DiariasTable({
           <FileSpreadsheet className="h-4 w-4 text-purple-500" />
           Detalhamento das Diárias
         </h3>
+        {onExportarExcel && (
+          <button
+            type="button"
+            onClick={onExportarExcel}
+            disabled={loading || diarias.length === 0 || isExporting}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar diárias filtradas para Excel (.xlsx)"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>{isExporting ? 'Exportando...' : 'Exportar para Excel'}</span>
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -100,6 +121,7 @@ export default function DiariasTable({
               <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100 text-xs font-bold text-neutral-700 uppercase tracking-wider">
                 <th className="py-4 px-6">Diarista</th>
                 <th className="py-4 px-6">Loja</th>
+                <th className="py-4 px-6">Coordenador</th>
                 <th className="py-4 px-6">Data</th>
                 <th className="py-4 px-6">Motivo</th>
                 <th className="py-4 px-6">Solicitante</th>
@@ -120,9 +142,12 @@ export default function DiariasTable({
                     )}
                   </td>
                   <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400">
+                    {d.coordenador_nome || <span className="text-neutral-400 italic">-</span>}
+                  </td>
+                  <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400">
                     {new Date(d.data_servico).toLocaleDateString('pt-BR')}
                   </td>
-                   <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400">{d.motivo}</td>
+                  <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400">{d.motivo}</td>
                   <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400">{d.solicitante.toUpperCase()}</td>
                   <td className="py-4 px-6">
                     {d.order_type === 'MANUAL' ? (

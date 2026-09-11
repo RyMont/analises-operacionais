@@ -43,7 +43,7 @@ from .comparativo_verbas import (
     comparativo_por_verba_detalhe_api,
     comparativo_por_verba_exportar_excel,
 )
-from .diarias import diarias_list_api, diarias_filtro_opcoes_api
+from .diarias import diarias_list_api, diarias_filtro_opcoes_api, diarias_exportar_excel
 from .premios import premios_list_api, premios_filtro_opcoes_api
 from .headcount import headcount_analise_api, headcount_loja_colaboradores_api
 from .presencas import (
@@ -94,6 +94,7 @@ __all__ = [
     "store_filtro_opcoes",
     "diarias_list_api",
     "diarias_filtro_opcoes_api",
+    "diarias_exportar_excel",
     "premios_list_api",
     "premios_filtro_opcoes_api",
     "loja_presencas_calendario_api",

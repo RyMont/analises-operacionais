@@ -1,3 +1,7 @@
+import datetime
+from io import BytesIO
+import pandas as pd
+from django.http import HttpResponse
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncMonth
 from operator import or_
@@ -17,22 +21,21 @@ class DiariaPaginacao(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsAdministrador])
-def diarias_list_api(request):
+def _filtrar_diarias_queryset(request):
     """
-    Retorna as diárias cadastradas no banco com suporte a filtros, paginação
-    e agregações estatísticas (BI) para renderizar os gráficos de desempenho.
-    
-    Docstring explicativa: Esta view retorna os dados paginados de diárias e expõe
-    cálculos agregados (Valor Total, Preço Médio e distribuições por Status, Turno,
-    Motivo, UF e Coordenador) para alimentar os gráficos no estilo PowerBI.
+    Aplica os filtros de requisição HTTP sobre o queryset de Diárias,
+    otimizando o relacionamento com Loja, Coordenador e Supervisor,
+    e excluindo lojas inativas.
     """
-    # Por que existe: Exclui lojas inativas para não distorcer as análises e o painel operacional de diárias.
-    queryset = Diaria.objects.all().select_related("loja").exclude(loja__status="INATIVA")
+    queryset = (
+        Diaria.objects.all()
+        .select_related("loja", "loja__coordenador", "loja__supervisor")
+        .exclude(loja__status="INATIVA")
+    )
+    params = getattr(request, "query_params", request.GET)
 
     # Filtros textuais / exatos suportando múltiplos separados por vírgula
-    diarista = request.query_params.get("diarista")
+    diarista = params.get("diarista")
     if diarista:
         diaristas = [d.strip() for d in diarista.split(",") if d.strip()]
         if diaristas:
@@ -45,7 +48,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(diarista__isnull=True) | Q(diarista="")
             queryset = queryset.filter(q_obj)
 
-    loja_id = request.query_params.get("loja")
+    loja_id = params.get("loja")
     if loja_id:
         lojas_ids = [l.strip() for l in loja_id.split(",") if l.strip()]
         if lojas_ids:
@@ -58,7 +61,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(loja_id__isnull=True)
             queryset = queryset.filter(q_obj)
 
-    turno = request.query_params.get("turno")
+    turno = params.get("turno")
     if turno:
         turnos = [t.strip() for t in turno.split(",") if t.strip()]
         if turnos:
@@ -71,7 +74,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(turno__isnull=True) | Q(turno="")
             queryset = queryset.filter(q_obj)
 
-    motivo = request.query_params.get("motivo")
+    motivo = params.get("motivo")
     if motivo:
         motivos = [m.strip() for m in motivo.split(",") if m.strip()]
         if motivos:
@@ -84,7 +87,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(motivo__isnull=True) | Q(motivo="")
             queryset = queryset.filter(q_obj)
 
-    status_filtro = request.query_params.get("status")
+    status_filtro = params.get("status")
     if status_filtro:
         status_lista = [s.strip() for s in status_filtro.split(",") if s.strip()]
         if status_lista:
@@ -98,7 +101,7 @@ def diarias_list_api(request):
             queryset = queryset.filter(q_obj)
 
     # Filtros de Supervisor, Coordenador e UF
-    supervisor_val = request.query_params.get("supervisor")
+    supervisor_val = params.get("supervisor")
     if supervisor_val:
         supervisores = [s.strip() for s in supervisor_val.split(",") if s.strip()]
         if supervisores:
@@ -111,7 +114,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(loja__isnull=True) | Q(loja__supervisor__isnull=True)
             queryset = queryset.filter(q_obj)
 
-    coordenador_val = request.query_params.get("coordenador")
+    coordenador_val = params.get("coordenador")
     if coordenador_val:
         coordenadores = [c.strip() for c in coordenador_val.split(",") if c.strip()]
         if coordenadores:
@@ -124,7 +127,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(loja__isnull=True) | Q(loja__coordenador__isnull=True)
             queryset = queryset.filter(q_obj)
 
-    uf_val = request.query_params.get("uf")
+    uf_val = params.get("uf")
     if uf_val:
         ufs = [u.strip() for u in uf_val.split(",") if u.strip()]
         if ufs:
@@ -137,7 +140,7 @@ def diarias_list_api(request):
                 q_obj = q_obj | Q(loja__isnull=True) | Q(loja__uf="") | Q(loja__uf__isnull=True)
             queryset = queryset.filter(q_obj)
 
-    order_type_val = request.query_params.get("order_type")
+    order_type_val = params.get("order_type")
     if order_type_val:
         order_types = [ot.strip() for ot in order_type_val.split(",") if ot.strip()]
         if order_types:
@@ -151,7 +154,7 @@ def diarias_list_api(request):
             queryset = queryset.filter(q_obj)
 
     # Filtro por Mês/Ano (competência) no formato YYYY-MM
-    mes_ano = request.query_params.get("mes_ano")
+    mes_ano = params.get("mes_ano")
     if mes_ano:
         meses_anos = [ma.strip() for ma in mes_ano.split(",") if ma.strip()]
         if meses_anos:
@@ -166,7 +169,7 @@ def diarias_list_api(request):
                 queryset = queryset.filter(reduce(or_, q_list))
 
     # Busca geral (nome diarista ou local ou solicitante)
-    search_query = request.query_params.get("search")
+    search_query = params.get("search")
     if search_query:
         queryset = queryset.filter(
             diarista__icontains=search_query
@@ -175,6 +178,26 @@ def diarias_list_api(request):
         ) | queryset.filter(
             solicitante__icontains=search_query
         )
+
+    return queryset
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def diarias_list_api(request):
+    """
+    Retorna as diárias cadastradas no banco com suporte a filtros, paginação
+    e agregações estatísticas (BI) para renderizar os gráficos de desempenho.
+    
+    Docstring explicativa: Esta view retorna os dados paginados de diárias e expõe
+    cálculos agregados (Valor Total, Preço Médio e distribuições por Status, Turno,
+    Motivo, UF e Coordenador) para alimentar os gráficos no estilo PowerBI.
+    """
+    # Por que existe: Exclui lojas inativas para não distorcer as análises e o painel operacional de diárias.
+    params = getattr(request, "query_params", request.GET)
+    coordenador_val = params.get("coordenador")
+    loja_id = params.get("loja")
+    supervisor_val = params.get("supervisor")
+    queryset = _filtrar_diarias_queryset(request)
 
     # 1. Agregados Gerais (KPIs)
     total_diarias = queryset.count()
@@ -421,3 +444,59 @@ def diarias_filtro_opcoes_api(request):
         "meses_anos": meses_formatados,
         "order_types": order_types_list
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def diarias_exportar_excel(request):
+    """
+    Exporta a listagem completa de diárias respeitando os filtros aplicados
+    para um arquivo Excel (.xlsx).
+    
+    Colunas incluídas:
+    ID Diária | Diarista | Loja | Coordenador | Data do Serviço | Turno | Motivo | Solicitante | Origem | Valor (R$) | Status | Justificativa
+    """
+    queryset = _filtrar_diarias_queryset(request).order_by("-data_servico", "id_diaria")
+
+    linhas_excel = []
+    for item in queryset:
+        loja_nome = item.loja.nome_referencia if item.loja else (item.local or "Não vinculada")
+        coord_nome = item.loja.coordenador.nome if (item.loja and item.loja.coordenador) else "-"
+        data_str = item.data_servico.strftime("%d/%m/%Y") if item.data_servico else ""
+
+        linhas_excel.append({
+            "ID Diária": str(item.id_diaria),
+            "Diarista": item.diarista,
+            "Loja": loja_nome,
+            "Coordenador": coord_nome,
+            "Data do Serviço": data_str,
+            "Turno": item.turno,
+            "Motivo": item.motivo,
+            "Solicitante": item.solicitante,
+            "Origem": item.order_type,
+            "Valor (R$)": float(item.valor) if item.valor is not None else 0.0,
+            "Status": item.status,
+            "Justificativa": item.justificativa or "",
+        })
+
+    df = pd.DataFrame(linhas_excel)
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Diárias")
+        worksheet = writer.sheets["Diárias"]
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+    buffer.seek(0)
+    data_hoje = datetime.date.today().strftime("%d_%m_%Y")
+    filename = f"diarias_{data_hoje}.xlsx"
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+

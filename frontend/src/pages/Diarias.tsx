@@ -20,7 +20,7 @@ import {
   BarChart, 
   Bar
 } from 'recharts';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import DiariasFilter from '../components/Diarias/DiariasFilter';
 import DiariasTable, { type DiariaData } from '../components/Diarias/DiariasTable';
 
@@ -148,6 +148,60 @@ export default function Diarias() {
     setFiltroOrderType('');
     setCurrentPage(1);
     setFetchTrigger(prev => prev + 1);
+  };
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Exportar todas as diárias filtradas para Excel (.xlsx)
+  const handleExportarExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (filtroMesAno) params.append('mes_ano', filtroMesAno);
+      if (filtroLoja) params.append('loja', filtroLoja);
+      if (filtroDiarista) params.append('diarista', filtroDiarista);
+      if (filtroTurno) params.append('turno', filtroTurno);
+      if (filtroMotivo) params.append('motivo', filtroMotivo);
+      if (filtroStatus) params.append('status', filtroStatus);
+      if (filtroSupervisor) params.append('supervisor', filtroSupervisor);
+      if (filtroCoordenador) params.append('coordenador', filtroCoordenador);
+      if (filtroUf) params.append('uf', filtroUf);
+      if (filtroOrderType) params.append('order_type', filtroOrderType);
+
+      const response = await api.get(`/diarias/exportar/?${params.toString()}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const dataHoje = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `diarias_${dataHoje}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Erro ao exportar diárias para Excel:', err);
+      // Fallback via URL direta
+      const params = new URLSearchParams();
+      if (filtroMesAno) params.append('mes_ano', filtroMesAno);
+      if (filtroLoja) params.append('loja', filtroLoja);
+      if (filtroDiarista) params.append('diarista', filtroDiarista);
+      if (filtroTurno) params.append('turno', filtroTurno);
+      if (filtroMotivo) params.append('motivo', filtroMotivo);
+      if (filtroStatus) params.append('status', filtroStatus);
+      if (filtroSupervisor) params.append('supervisor', filtroSupervisor);
+      if (filtroCoordenador) params.append('coordenador', filtroCoordenador);
+      if (filtroUf) params.append('uf', filtroUf);
+      if (filtroOrderType) params.append('order_type', filtroOrderType);
+      const url = `http://${window.location.hostname}:${getBackendPort()}/diarias/exportar/?${params.toString()}`;
+      window.open(url, '_blank');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const formatarReal = (valor: number) => {
@@ -612,6 +666,8 @@ export default function Diarias() {
           currentPage={currentPage}
           totalPages={totalPages}
           setCurrentPage={setCurrentPage}
+          onExportarExcel={handleExportarExcel}
+          isExporting={isExporting}
         />
       </main>
     </div>

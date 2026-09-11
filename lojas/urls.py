@@ -41,6 +41,7 @@ urlpatterns = [
     
     # ========== DIÁRIAS (BI & Importador) ==========
     path("diarias/importar/", configuracoes.diaria_import_async, name="importar_diarias"),
+    path("diarias/exportar/", views.diarias_exportar_excel, name="diarias_exportar_excel"),
     path("diarias/", views.diarias_list_api, name="lista_diarias"),
     path("diarias/filtro-opcoes/", views.diarias_filtro_opcoes_api, name="diarias_filtro_opcoes"),
 
