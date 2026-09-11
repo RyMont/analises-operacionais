@@ -525,3 +525,112 @@ def comparativo_por_verba_exportar_excel(request):
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdministrador])
+def comparativo_por_verba_lojas_exportar_excel(request):
+    """
+    Exporta para planilha Excel (.xlsx) a distribuição de custos por loja física
+    da aba Por Verba com todas as informações exibidas no tooltip do gráfico:
+    Loja, UF, Coordenador, Supervisor, Total na Seleção (R$), Participação (%),
+    Colaboradores e Total de Lançamentos.
+    """
+    folha_qs, lojas_filtradas_ids, datas_exatas, _ = _filtrar_linhas_folha_por_verba(request)
+
+    total_geral = folha_qs.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+    total_float = float(total_geral)
+
+    lojas_agrupadas = folha_qs.values(
+        "loja_id",
+        "loja__nome_referencia",
+        "loja__uf",
+        "loja__coordenador__nome",
+        "loja__supervisor__nome",
+    ).annotate(
+        total_valor=Sum("valor"),
+        qtd_colaboradores=Count("matricula", distinct=True),
+        qtd_linhas=Count("id")
+    ).order_by("-total_valor")
+
+    linhas_excel = []
+    for l in lojas_agrupadas:
+        valor = round(float(l["total_valor"] or 0), 2)
+        pct = round((valor / total_float * 100.0), 2) if total_float > 0 else 0.0
+        linhas_excel.append({
+            "Loja": l["loja__nome_referencia"] or f"Loja {l['loja_id']}",
+            "UF": l["loja__uf"] or "-",
+            "Coordenador": l["loja__coordenador__nome"] or "-",
+            "Supervisor": l["loja__supervisor__nome"] or "-",
+            "Total na Seleção (R$)": valor,
+            "Participação (%)": pct,
+            "Colaboradores": l["qtd_colaboradores"],
+            "Total de Lançamentos": l["qtd_linhas"],
+        })
+
+    if not linhas_excel:
+        df = pd.DataFrame(columns=[
+            "Loja", "UF", "Coordenador", "Supervisor",
+            "Total na Seleção (R$)", "Participação (%)",
+            "Colaboradores", "Total de Lançamentos"
+        ])
+    else:
+        df = pd.DataFrame(linhas_excel)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        sheet_name = "Distribuição por Loja"
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        worksheet = writer.sheets[sheet_name]
+
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        for col_idx, cell in enumerate(worksheet[1], start=1):
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+
+        thin_border = Border(
+            left=Side(style="thin", color="E0E0E0"),
+            right=Side(style="thin", color="E0E0E0"),
+            top=Side(style="thin", color="E0E0E0"),
+            bottom=Side(style="thin", color="E0E0E0"),
+        )
+
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            for cell in row:
+                cell.border = thin_border
+                col_name = worksheet.cell(row=1, column=cell.column).value
+                if col_name == "Total na Seleção (R$)":
+                    cell.number_format = '"R$" #,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_name == "Participação (%)":
+                    cell.number_format = '0.0"%"'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_name in ("Colaboradores", "Total de Lançamentos"):
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_name == "UF":
+                    cell.alignment = Alignment(horizontal="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
+
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    buffer.seek(0)
+    data_str = datetime.date.today().strftime("%Y-%m-%d")
+    filename = f"raio_x_distribuicao_lojas_{data_str}.xlsx"
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+

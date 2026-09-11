@@ -12,7 +12,7 @@ from .views_listas import (
     colaborador_atribuir_cargo_api,
     colaborador_detail_update_api,
 )
-from .views_turnover import turnover_list_api, turnover_filtro_opcoes_api
+from .views_turnover import turnover_list_api, turnover_filtro_opcoes_api, turnover_exportar_excel
 from .views_sync import (
     exportar_pendencias_lojas_geovictoria,
     sync_geovictoria,
@@ -44,6 +44,7 @@ __all__ = [
     "colaborador_detail_update_api",
     "turnover_list_api",
     "turnover_filtro_opcoes_api",
+    "turnover_exportar_excel",
     "derive_termino_state",
     "encontrar_grupos_funcao",
     "exportar_pendencias_lojas_geovictoria",

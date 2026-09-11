@@ -14,6 +14,7 @@ urlpatterns = [
     path('filtro-opcoes/', views.colaborador_filtro_opcoes, name='filtro_opcoes'),
     path('status-gestao-opcoes/', views.status_gestao_opcoes, name='status_gestao_opcoes'),
     path('turnover/', views.turnover_list_api, name='turnover_list_api'),
+    path('turnover/exportar/', views.turnover_exportar_excel, name='turnover_exportar_excel'),
     path('turnover/filtro-opcoes/', views.turnover_filtro_opcoes_api, name='turnover_filtro_opcoes_api'),
     path('terminos/', views.terminos_list, name='terminos_list'),
     path('terminos/exportar/', views.exportar_terminos_excel, name='terminos_export'),

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
-import { BarChart3, PieChart as PieIcon, Building2 } from 'lucide-react';
+import { BarChart3, PieChart as PieIcon, Building2, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export interface TopVerbaItem {
@@ -37,6 +37,8 @@ interface ComparativoPorVerbaChartsProps {
   categorias: CategoriaItem[];
   verbaNome?: string;
   onSelectVerba?: (codigo: string) => void;
+  onExportarLojasExcel?: () => void;
+  isExportingLojas?: boolean;
 }
 
 const CORES_CATEGORIAS: Record<string, string> = {
@@ -138,7 +140,9 @@ export default function ComparativoPorVerbaCharts({
   topLojas = [],
   categorias,
   verbaNome,
-  onSelectVerba
+  onSelectVerba,
+  onExportarLojasExcel,
+  isExportingLojas = false,
 }: ComparativoPorVerbaChartsProps) {
   const dadosBarrasVerbas = useMemo(() => {
     return [...topVerbas].reverse();
@@ -166,9 +170,27 @@ export default function ComparativoPorVerbaCharts({
               </p>
             </div>
           </div>
-          <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-            {topLojas.length} {topLojas.length === 1 ? 'loja encontrada' : 'lojas encontradas'}
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+              {topLojas.length} {topLojas.length === 1 ? 'loja encontrada' : 'lojas encontradas'}
+            </span>
+            {onExportarLojasExcel && (
+              <button
+                type="button"
+                onClick={onExportarLojasExcel}
+                disabled={loading || topLojas.length === 0 || isExportingLojas}
+                className="inline-flex items-center justify-center gap-2 px-3 py-1.5 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Exportar dados do gráfico de lojas para Excel (.xlsx)"
+              >
+                {isExportingLojas ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                )}
+                <span>{isExportingLojas ? 'Exportando...' : 'Exportar para Excel'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (

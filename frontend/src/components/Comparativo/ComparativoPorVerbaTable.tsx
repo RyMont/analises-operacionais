@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Eye, FileSpreadsheet, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, FileSpreadsheet, Search, ArrowUpDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export interface VerbaResultadoItem {
@@ -17,6 +17,7 @@ export interface VerbaResultadoItem {
 interface ComparativoPorVerbaTableProps {
   resultados: VerbaResultadoItem[];
   loading: boolean;
+  isExporting?: boolean;
   onVerDetalhes: (codigo: string, descricao: string) => void;
   onExportarExcel: () => void;
 }
@@ -40,6 +41,7 @@ const getBadgeCategoria = (categoria: string) => {
 export default function ComparativoPorVerbaTable({
   resultados,
   loading,
+  isExporting = false,
   onVerDetalhes,
   onExportarExcel
 }: ComparativoPorVerbaTableProps) {
@@ -113,11 +115,16 @@ export default function ComparativoPorVerbaTable({
           <button
             type="button"
             onClick={onExportarExcel}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold shadow-xs transition-colors cursor-pointer w-full sm:w-auto justify-center"
+            disabled={loading || dadosFiltrados.length === 0 || isExporting}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed w-full sm:w-auto"
             title="Exportar todas as verbas filtradas para Excel (.xlsx)"
           >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Exportar Excel
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>{isExporting ? 'Exportando...' : 'Exportar para Excel'}</span>
           </button>
         </div>
       </div>

@@ -1,5 +1,7 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
+import openpyxl
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -477,6 +479,27 @@ class ComparativoViewsTests(TestCase):
             response["Content-Type"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+    def test_comparativo_por_verba_lojas_exportar_excel(self):
+        """Valida exportação em Excel dos dados do gráfico de distribuição por loja física."""
+        response = self.client.get("/comparativo/por-verba/exportar-lojas/", {"period": "2026-03"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        sheet = wb.active
+        self.assertEqual(sheet.title, "Distribuição por Loja")
+        headers = [cell.value for cell in sheet[1]]
+        self.assertIn("Loja", headers)
+        self.assertIn("UF", headers)
+        self.assertIn("Coordenador", headers)
+        self.assertIn("Supervisor", headers)
+        self.assertIn("Total na Seleção (R$)", headers)
+        self.assertIn("Participação (%)", headers)
+        self.assertIn("Colaboradores", headers)
+        self.assertIn("Total de Lançamentos", headers)
 
     def test_comparativo_verbas_opcoes_api(self):
         """Valida listagem de opções da base de verbas para o filtro."""

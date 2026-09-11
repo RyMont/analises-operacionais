@@ -81,6 +81,7 @@ export default function Comparativo() {
   const [totalPages, setTotalPages] = useState(1);
   const [loadingData, setLoadingData] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Estados do Modal de Detalhes de uma Filial
   const [detailModal, setDetailModal] = useState({
@@ -220,17 +221,46 @@ export default function Comparativo() {
   };
 
   // Handler para exportação em lote para Excel (.xlsx)
-  const handleExportarExcel = () => {
-    const params = new URLSearchParams();
-    if (filtros.periodo) params.append('period', filtros.periodo);
-    if (filtros.loja) params.append('loja', filtros.loja);
-    if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
-    if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
-    if (filtros.uf) params.append('uf', filtros.uf);
+  const handleExportarExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
 
-    // Utiliza o hostname dinâmico do navegador para garantir funcionamento em rede local e produção
-    const url = `http://${window.location.hostname}:${getBackendPort()}/comparativo/relatorio/exportar/?${params.toString()}`;
-    window.open(url, '_blank');
+      const response = await api.get(`/comparativo/relatorio/exportar/?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `comparativo_folha_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Erro ao exportar comparativo:', err);
+      // Fallback para download direto caso ocorra erro no blob
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
+
+      const fallbackUrl = `http://${window.location.hostname}:${getBackendPort()}/comparativo/relatorio/exportar/?${params.toString()}`;
+      window.open(fallbackUrl, '_blank');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -309,6 +339,7 @@ export default function Comparativo() {
               setCurrentPage={setCurrentPage}
               onVerDetalhes={handleVerDetalhes}
               onExportarExcel={handleExportarExcel}
+              isExporting={isExporting}
             />
           </main>
 

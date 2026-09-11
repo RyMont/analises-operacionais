@@ -76,6 +76,8 @@ export default function ComparativoPorVerba({
 
   const [loadingData, setLoadingData] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isExportingLojas, setIsExportingLojas] = useState(false);
 
   // Modal de Detalhes da Verba
   const [modalDetalhe, setModalDetalhe] = useState<{
@@ -163,17 +165,92 @@ export default function ComparativoPorVerba({
     });
   };
 
-  const handleExportarExcel = () => {
-    const params = new URLSearchParams();
-    if (filtros.periodo) params.append('period', filtros.periodo);
-    if (filtros.loja) params.append('loja', filtros.loja);
-    if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
-    if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
-    if (filtros.uf) params.append('uf', filtros.uf);
-    if (filtros.verba) params.append('verba', filtros.verba);
+  const handleExportarExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
+      if (filtros.verba) params.append('verba', filtros.verba);
 
-    const url = `http://${window.location.hostname}:${getBackendPort()}/comparativo/por-verba/exportar/?${params.toString()}`;
-    window.open(url, '_blank');
+      const response = await api.get(`/comparativo/por-verba/exportar/?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `comparativo_por_verba_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Erro ao exportar por verba:', err);
+      // Fallback para abertura direta
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
+      if (filtros.verba) params.append('verba', filtros.verba);
+
+      const fallbackUrl = `http://${window.location.hostname}:${getBackendPort()}/comparativo/por-verba/exportar/?${params.toString()}`;
+      window.open(fallbackUrl, '_blank');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportarLojasExcel = async () => {
+    try {
+      setIsExportingLojas(true);
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
+      if (filtros.verba) params.append('verba', filtros.verba);
+
+      const response = await api.get(`/comparativo/por-verba/exportar-lojas/?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `raio_x_distribuicao_lojas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Erro ao exportar distribuição por loja:', err);
+      // Fallback para abertura direta
+      const params = new URLSearchParams();
+      if (filtros.periodo) params.append('period', filtros.periodo);
+      if (filtros.loja) params.append('loja', filtros.loja);
+      if (filtros.supervisor) params.append('supervisor', filtros.supervisor);
+      if (filtros.coordenador) params.append('coordenador', filtros.coordenador);
+      if (filtros.uf) params.append('uf', filtros.uf);
+      if (filtros.verba) params.append('verba', filtros.verba);
+
+      const fallbackUrl = `http://${window.location.hostname}:${getBackendPort()}/comparativo/por-verba/exportar-lojas/?${params.toString()}`;
+      window.open(fallbackUrl, '_blank');
+    } finally {
+      setIsExportingLojas(false);
+    }
   };
 
   // Prepara parâmetros para passar ao modal de detalhes
@@ -231,12 +308,15 @@ export default function ComparativoPorVerba({
           const item = resultados.find((r) => r.codigo === cod);
           handleVerDetalhes(cod, item ? item.descricao : '');
         }}
+        onExportarLojasExcel={handleExportarLojasExcel}
+        isExportingLojas={isExportingLojas}
       />
 
       {/* 4. Tabela de Detalhamento por Verba */}
       <ComparativoPorVerbaTable
         resultados={resultados}
         loading={loadingData}
+        isExporting={isExporting}
         onVerDetalhes={handleVerDetalhes}
         onExportarExcel={handleExportarExcel}
       />

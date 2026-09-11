@@ -42,6 +42,7 @@ from .comparativo_verbas import (
     comparativo_verbas_opcoes_api,
     comparativo_por_verba_detalhe_api,
     comparativo_por_verba_exportar_excel,
+    comparativo_por_verba_lojas_exportar_excel,
 )
 from .diarias import diarias_list_api, diarias_filtro_opcoes_api, diarias_exportar_excel
 from .premios import premios_list_api, premios_filtro_opcoes_api
@@ -71,6 +72,7 @@ __all__ = [
     "comparativo_verbas_opcoes_api",
     "comparativo_por_verba_detalhe_api",
     "comparativo_por_verba_exportar_excel",
+    "comparativo_por_verba_lojas_exportar_excel",
     "competencia_anterior",
     "escopo_create",
     "escopo_delete",

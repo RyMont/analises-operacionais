@@ -17,7 +17,9 @@ import {
   Coins,
   Wallet,
   Receipt,
-  BarChart3
+  BarChart3,
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -34,7 +36,7 @@ import {
   CartesianGrid,
   ReferenceLine
 } from 'recharts';
-import api from '../api/client';
+import api, { getBackendPort } from '../api/client';
 import SearchableSelect from '../components/ui/searchable-select';
 
 interface ColaboradorDemitido {
@@ -362,6 +364,54 @@ export default function Turnover() {
     setBuscaText('');
     setCurrentPage(1);
     setFetchTrigger(prev => prev + 1);
+  };
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Exportar todos os colaboradores demitidos filtrados para Excel (.xlsx)
+  const handleExportarExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (filtroLoja) params.append('loja', filtroLoja);
+      if (filtroCoordenador) params.append('coordenador', filtroCoordenador);
+      if (filtroSupervisor) params.append('supervisor', filtroSupervisor);
+      if (filtroUf) params.append('uf', filtroUf);
+      if (filtroMotivo) params.append('motivo', filtroMotivo);
+      if (filtroCompetencia) params.append('mes_ano', filtroCompetencia);
+      if (buscaText) params.append('search', buscaText);
+
+      const response = await api.get(`/colaboradores/turnover/exportar/?${params.toString()}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const dataHoje = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `desligamentos_turnover_${dataHoje}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Erro ao exportar desligamentos para Excel:', err);
+      // Fallback via URL direta
+      const params = new URLSearchParams();
+      if (filtroLoja) params.append('loja', filtroLoja);
+      if (filtroCoordenador) params.append('coordenador', filtroCoordenador);
+      if (filtroSupervisor) params.append('supervisor', filtroSupervisor);
+      if (filtroUf) params.append('uf', filtroUf);
+      if (filtroMotivo) params.append('motivo', filtroMotivo);
+      if (filtroCompetencia) params.append('mes_ano', filtroCompetencia);
+      if (buscaText) params.append('search', buscaText);
+      const url = `http://${window.location.hostname}:${getBackendPort()}/colaboradores/turnover/exportar/?${params.toString()}`;
+      window.open(url, '_blank');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Formata data ISO para string legível
@@ -1343,13 +1393,29 @@ export default function Turnover() {
 
       {/* Tabela Detalhada com Colunas Financeiras */}
       <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden shadow-xs">
-        <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="font-bold text-lg text-neutral-900 dark:text-neutral-100">Lista Detalhada de Desligamentos</h3>
             <p className="text-xs text-neutral-450">Histórico de colaboradores desligados com motivo, salário e custos rescisórios mapeados</p>
           </div>
-          <div className="text-xs font-semibold text-neutral-500">
-            Total nesta seleção: <span className="font-bold text-neutral-900 dark:text-neutral-100">{totalDemissoes}</span> colaboradores
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-xs font-semibold text-neutral-500">
+              Total nesta seleção: <span className="font-bold text-neutral-900 dark:text-neutral-100">{totalDemissoes}</span> colaboradores
+            </div>
+            <button
+              type="button"
+              onClick={handleExportarExcel}
+              disabled={loadingData || totalDemissoes === 0 || isExporting}
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Exportar desligamentos filtrados para Excel (.xlsx)"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>{isExporting ? 'Exportando...' : 'Exportar para Excel'}</span>
+            </button>
           </div>
         </div>
 

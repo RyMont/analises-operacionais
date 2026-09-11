@@ -1,4 +1,7 @@
 from datetime import date
+from io import BytesIO
+import pandas as pd
+from django.http import HttpResponse
 from django.db import DatabaseError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -522,3 +525,175 @@ def turnover_filtro_opcoes_api(request):
         "motivos": motivos_list,
         "competencias": meses_list
     })
+
+
+def _filtrar_colaboradores_demitidos(request):
+    """
+    Filtra os colaboradores demitidos de acordo com os parâmetros da requisição
+    (loja, coordenador, supervisor, uf, mes_ano, motivo, search).
+    """
+    params = getattr(request, "query_params", request.GET)
+
+    colaboradores_base = list(
+        Colaborador.objects.exclude(cargo="AUXILIAR ADMINISTRAT")
+        .select_related("loja_gestao", "loja_gestao__coordenador", "loja_gestao__supervisor")
+    )
+
+    for c in colaboradores_base:
+        loja_resolvida = c.loja_gestao
+        if not loja_resolvida and c.centro_custo:
+            loja_resolvida = obter_loja_por_cc(c.centro_custo)
+        c.loja_resolvida = loja_resolvida
+
+    loja_id = params.get("loja")
+    if loja_id:
+        lojas_ids = [l.strip() for l in loja_id.split(",") if l.strip()]
+        if lojas_ids:
+            has_null = "null" in lojas_ids
+            vals = [int(l) for l in lojas_ids if l != "null" and l.isdigit()]
+            colaboradores_base = [
+                c for c in colaboradores_base
+                if (c.loja_resolvida and c.loja_resolvida.id in vals) or (has_null and c.loja_resolvida is None)
+            ]
+
+    coordenador_val = params.get("coordenador")
+    if coordenador_val:
+        coordenadores = [c.strip() for c in coordenador_val.split(",") if c.strip()]
+        if coordenadores:
+            has_null = "null" in coordenadores
+            vals = [cv for cv in coordenadores if cv != "null"]
+            colaboradores_base = [
+                c for c in colaboradores_base
+                if (c.loja_resolvida and c.loja_resolvida.coordenador and c.loja_resolvida.coordenador.nome in vals)
+                or (has_null and (not c.loja_resolvida or not c.loja_resolvida.coordenador))
+            ]
+
+    supervisor_val = params.get("supervisor")
+    if supervisor_val:
+        supervisores = [s.strip() for s in supervisor_val.split(",") if s.strip()]
+        if supervisores:
+            has_null = "null" in supervisores
+            vals = [sv for sv in supervisores if sv != "null"]
+            colaboradores_base = [
+                c for c in colaboradores_base
+                if (c.loja_resolvida and c.loja_resolvida.supervisor and c.loja_resolvida.supervisor.nome in vals)
+                or (has_null and (not c.loja_resolvida or not c.loja_resolvida.supervisor))
+            ]
+
+    uf_val = params.get("uf")
+    if uf_val:
+        ufs = [u.strip() for u in uf_val.split(",") if u.strip()]
+        if ufs:
+            has_null = "null" in ufs
+            vals = [uv for uv in ufs if uv != "null"]
+            colaboradores_base = [
+                c for c in colaboradores_base
+                if (c.loja_resolvida and c.loja_resolvida.uf in vals)
+                or (has_null and (not c.loja_resolvida or not c.loja_resolvida.uf))
+            ]
+
+    mes_ano = params.get("mes_ano")
+    meses_anos = []
+    if mes_ano:
+        meses_anos = [ma.strip() for ma in mes_ano.split(",") if ma.strip()]
+
+    demitidos = [
+        c for c in colaboradores_base
+        if c.status == "D" and c.data_demissao and (not meses_anos or c.data_demissao.strftime("%Y-%m") in meses_anos)
+    ]
+
+    motivo_val = params.get("motivo")
+    if motivo_val:
+        motivos = [m.strip() for m in motivo_val.split(",") if m.strip()]
+        if motivos:
+            has_null = "null" in motivos
+            vals = [mv for motivos_item in motivos if (mv := motivos_item) != "null"]
+            demitidos = [
+                c for c in demitidos
+                if (c.motivo_demissao in vals) or (has_null and not c.motivo_demissao)
+            ]
+
+    search_query = params.get("search")
+    if search_query:
+        search_query_lower = search_query.lower().strip()
+        demitidos = [
+            c for c in demitidos
+            if search_query_lower in c.nome.lower() or search_query_lower in c.re.lower()
+        ]
+
+    return demitidos
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def turnover_exportar_excel(request):
+    """
+    Exporta a listagem de colaboradores desligados respeitando os filtros aplicados
+    para um arquivo Excel (.xlsx).
+    """
+    user = request.user
+    if not user.is_superuser:
+        from usuarios.models import RolePermission
+        group = user.groups.first()
+        try:
+            perm = RolePermission.objects.get(group=group, module="turnover")
+            if not perm.can_view:
+                return Response(
+                    {"error": "Você não possui permissão para exportar dados de turnover."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except (RolePermission.DoesNotExist, DatabaseError):
+            return Response(
+                {"error": "Erro ao validar permissões de acesso."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    demitidos = _filtrar_colaboradores_demitidos(request)
+    demitidos_ordenados = sorted(
+        demitidos,
+        key=lambda c: (c.data_demissao or date.min, c.nome),
+        reverse=True
+    )
+
+    linhas_excel = []
+    for c in demitidos_ordenados:
+        loja_nome = c.loja_resolvida.nome_referencia if c.loja_resolvida else (c.centro_custo or "-")
+        coord_nome = c.loja_resolvida.coordenador.nome if (c.loja_resolvida and c.loja_resolvida.coordenador) else "-"
+        super_nome = c.loja_resolvida.supervisor.nome if (c.loja_resolvida and c.loja_resolvida.supervisor) else "-"
+        data_dem_str = c.data_demissao.strftime("%d/%m/%Y") if c.data_demissao else "-"
+
+        linhas_excel.append({
+            "RE": c.re,
+            "Colaborador": c.nome,
+            "Cargo": c.cargo or "-",
+            "Loja": loja_nome,
+            "Centro de Custo": c.centro_custo or "-",
+            "Coordenador": coord_nome,
+            "Supervisor": super_nome,
+            "Data Demissão": data_dem_str,
+            "Motivo Demissão": c.motivo_demissao or "Não Informado",
+            "Salário Base (R$)": float(c.salario_rescisao) if c.salario_rescisao is not None else 0.0,
+            "Custo Rescisão (R$)": float(c.valor_rescisao_estimado) if c.valor_rescisao_estimado is not None else 0.0,
+        })
+
+    df = pd.DataFrame(linhas_excel)
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Desligamentos")
+        worksheet = writer.sheets["Desligamentos"]
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+    buffer.seek(0)
+    data_hoje = date.today().strftime("%d_%m_%Y")
+    filename = f"desligamentos_turnover_{data_hoje}.xlsx"
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
