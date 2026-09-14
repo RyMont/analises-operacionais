@@ -720,7 +720,7 @@ class AusenciaAnalysisAPITests(TestCase):
     """
     def setUp(self):
         from django.contrib.auth.models import Group, User
-        from lojas.models import Loja, Coordenador
+        from lojas.models import Loja, Coordenador, Supervisor
         from colaboradores.models import Colaborador
         
         # Grupo e usuário autenticado com permissão GestaoOrAdministrador
@@ -738,12 +738,13 @@ class AusenciaAnalysisAPITests(TestCase):
         
         self.client.login(username="testuser", password="password")
 
-        # Coordenadores
+        # Coordenadores e Supervisores
         self.coord_a = Coordenador.objects.create(nome="Coord A")
         self.coord_b = Coordenador.objects.create(nome="Coord B")
+        self.super_a = Supervisor.objects.create(nome="Super A")
 
         # Lojas
-        self.loja_1 = Loja.objects.create(nome_referencia="Loja 1", centro_de_custo="101", coordenador=self.coord_a, uf="SP")
+        self.loja_1 = Loja.objects.create(nome_referencia="Loja 1", centro_de_custo="101", coordenador=self.coord_a, supervisor=self.super_a, uf="SP")
         self.loja_2 = Loja.objects.create(nome_referencia="Loja 2", centro_de_custo="102", coordenador=self.coord_b, uf="RJ")
 
         # Colaboradores (3 colaboradores em Loja 1, 2 em Loja 2)
@@ -798,6 +799,8 @@ class AusenciaAnalysisAPITests(TestCase):
         # Ana Maria (4 faltas) -> acima_da_media=True, top_30_percent=True
         self.assertTrue(results["100001"]["acima_da_media"])
         self.assertTrue(results["100001"]["top_30_percent"])
+        self.assertEqual(results["100001"]["coordenador_nome"], "Coord A")
+        self.assertEqual(results["100001"]["supervisor_nome"], "Super A")
 
         # Bruno Sousa (2 faltas) -> acima_da_media=False, top_30_percent=False
         self.assertFalse(results["100002"]["acima_da_media"])
@@ -869,6 +872,16 @@ class AusenciaAnalysisAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         self.assertTrue(len(response.content) > 0)
+
+        # Valida que as colunas e dados no Excel contêm Coordenador e Supervisor à direita de Loja
+        df = pd.read_excel(BytesIO(response.content))
+        expected_cols = [
+            "RE", "Nome", "Dt. Admissão", "Loja", "Coordenador", "Supervisor",
+            "Status Gestão", "Faltas", "Atestados", "Faltas + Atestados", "Suspensões"
+        ]
+        self.assertEqual(list(df.columns), expected_cols)
+        self.assertEqual(df.iloc[0]["Coordenador"], "Coord A")
+        self.assertEqual(df.iloc[0]["Supervisor"], "Super A")
 
     def test_soma_tab_logic(self):
         """

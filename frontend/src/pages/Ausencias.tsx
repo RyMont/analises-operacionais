@@ -29,6 +29,7 @@ interface ColaboradorAusencia {
   data_admissao: string | null;
   loja_nome: string;
   coordenador_nome: string;
+  supervisor_nome: string;
   sub_regiao: string;
   status_gestao: string;
   faltas: number;
@@ -654,6 +655,8 @@ export default function Ausencias() {
                   <th className="p-4">Colaborador</th>
                   <th className="p-4 w-24">Dt. Admissão</th>
                   <th className="p-4">Loja</th>
+                  <th className="p-4">Coordenador</th>
+                  <th className="p-4">Supervisor</th>
                   <th className="p-4">Status Gestão</th>
                   <th className="p-4 text-center w-16">Faltas</th>
                   <th className="p-4 text-center w-16">Atestados</th>
@@ -675,6 +678,8 @@ export default function Ausencias() {
                         <td className="p-4 font-semibold text-neutral-900 dark:text-neutral-100">{row.nome}</td>
                         <td className="p-4 text-neutral-600 dark:text-neutral-400">{formatarData(row.data_admissao || '')}</td>
                         <td className="p-4 text-neutral-600 dark:text-neutral-400">{row.loja_nome}</td>
+                        <td className="p-4 text-neutral-600 dark:text-neutral-400">{row.coordenador_nome || '-'}</td>
+                        <td className="p-4 text-neutral-600 dark:text-neutral-400">{row.supervisor_nome || '-'}</td>
                         <td className="p-4 text-neutral-600 dark:text-neutral-400">
                           <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-100 text-neutral-750 dark:bg-neutral-800 dark:text-neutral-300">
                             {row.status_gestao}
@@ -727,7 +732,7 @@ export default function Ausencias() {
                       {/* Linha Expansível contendo o Histórico Detalhado */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={activeTab === 'suspensoes' ? 10 : 11} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-850">
+                          <td colSpan={activeTab === 'suspensoes' ? 12 : 13} className="p-0 bg-neutral-50 dark:bg-neutral-950 border-b border-neutral-100 dark:border-neutral-850">
                             <div className="p-4 md:px-8 space-y-3">
                               <h4 className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
                                 <FileText className="h-4 w-4" />
