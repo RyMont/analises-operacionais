@@ -547,6 +547,109 @@ class ComparativoViewsTests(TestCase):
         self.assertEqual(len(resp_com_filtro.data["resultados"]), 1)
         self.assertEqual(resp_com_filtro.data["resultados"][0]["codigo"], "300")
 
+    def test_headcount_mensal_sra_e_kpis_raio_x(self):
+        """
+        Testa o cálculo da força de trabalho do mês (Opção 1 aprovada):
+        - Colaborador ativo contínuo
+        - Colaborador admitido no mês
+        - Colaborador demitido no meio do mês (deve ser contado)
+        - Colaborador demitido antes do mês (não deve ser contado)
+        - Cargo desconsiderado AUXILIAR ADMINISTRAT (não deve ser contado)
+        - Validação dos KPIs na API /comparativo/relatorio/
+        """
+        from colaboradores.models import Colaborador
+        from lojas.models import HeadcountMensalLoja
+        from lojas.services.headcount_sra import registrar_snapshot_headcount_sra
+
+        # 1. Cria colaboradores para a competência de teste 2026-04
+        # Colaborador A: Ativo normal
+        Colaborador.objects.create(
+            re="TEST01",
+            nome="Ativo Normal",
+            loja=self.loja,
+            centro_custo="123456789012",
+            data_admissao=date(2025, 1, 1),
+            status="A",
+            cargo="OPERADOR",
+        )
+        # Colaborador B: Demitido no meio do mês (15/04/2026) -> DEVE ser contabilizado
+        Colaborador.objects.create(
+            re="TEST02",
+            nome="Demitido Meio do Mes",
+            loja=self.loja,
+            centro_custo="123456789012",
+            data_admissao=date(2025, 1, 1),
+            data_demissao=date(2026, 4, 15),
+            status="D",
+            cargo="OPERADOR",
+        )
+        # Colaborador C: Demitido ANTES do início do mês (31/03/2026) -> NÃO deve ser contabilizado
+        Colaborador.objects.create(
+            re="TEST03",
+            nome="Demitido Antes",
+            loja=self.loja,
+            centro_custo="123456789012",
+            data_admissao=date(2025, 1, 1),
+            data_demissao=date(2026, 3, 31),
+            status="D",
+            cargo="OPERADOR",
+        )
+        # Colaborador D: Cargo desconsiderado AUXILIAR ADMINISTRAT -> NÃO deve ser contabilizado
+        Colaborador.objects.create(
+            re="TEST04",
+            nome="Auxiliar Admin",
+            loja=self.loja,
+            centro_custo="123456789012",
+            data_admissao=date(2025, 1, 1),
+            status="A",
+            cargo="AUXILIAR ADMINISTRAT",
+        )
+
+        # 2. Executa o registro de snapshot para 2026-04
+        res_snapshot = registrar_snapshot_headcount_sra(ano=2026, mes=4)
+        self.assertEqual(res_snapshot["ano"], 2026)
+        self.assertEqual(res_snapshot["mes"], 4)
+
+        # Na loja de teste, devem ser contabilizados exatamente 2 (Colab A e Colab B)
+        registro = HeadcountMensalLoja.objects.get(loja=self.loja, ano=2026, mes=4)
+        self.assertEqual(registro.total_ativos, 2)
+
+        # 3. Cria verbas na folha (LinhaFolha) para a competência 2026-04
+        verba_salario = Verba.objects.get(codigo_verba="001")
+        LinhaFolha.objects.create(
+            matricula="TEST01",
+            verba=verba_salario,
+            codigo_verba="001",
+            valor=Decimal("1500.00"),
+            dt_arq=date(2026, 4, 1),
+            dt_pagamento=date(2026, 4, 30),
+            centro_custo="123456789012",
+            centro_custo_real="123456789012",
+            loja=self.loja,
+            categoria="SALARIO",
+        )
+        LinhaFolha.objects.create(
+            matricula="TEST02",
+            verba=verba_salario,
+            codigo_verba="001",
+            valor=Decimal("750.00"),
+            dt_arq=date(2026, 4, 1),
+            dt_pagamento=date(2026, 4, 15),
+            centro_custo="123456789012",
+            centro_custo_real="123456789012",
+            loja=self.loja,
+            categoria="SALARIO",
+        )
+
+        # 4. Chama a API de Raio-X filtrando por 2026-04
+        response = self.client.get("/comparativo/relatorio/", {"period": "2026-04", "loja": str(self.loja.id)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        kpis = response.data["results"]["kpis"]
+
+        # 2 colaboradores receberam verba (TEST01 e TEST02) de um total de 2 ativos daquela loja
+        self.assertEqual(kpis["colaboradores_receberam_total"], 2)
+        self.assertEqual(kpis["funcionarios_total"], 2)
+
 
 
 

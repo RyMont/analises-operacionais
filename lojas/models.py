@@ -824,6 +824,45 @@ class ResumoFolhaMensal(models.Model):
         return f"{self.loja} - {self.dt_arq} - R$ {self.valor_total}"
 
 
+class HeadcountMensalLoja(models.Model):
+    """
+    Por que existe: Registra o snapshot mensal de colaboradores ativos (força de trabalho)
+    por loja física a partir das importações do arquivo SRA (TOTVS).
+    Permanece aberto durante o mês corrente e é fechado automaticamente ao final do mês.
+    """
+
+    loja = models.ForeignKey(
+        "Loja",
+        on_delete=models.CASCADE,
+        related_name="headcounts_mensais",
+        verbose_name="Loja",
+    )
+    ano = models.IntegerField("Ano", db_index=True)
+    mes = models.IntegerField("Mês", db_index=True)
+    total_ativos = models.IntegerField("Total de Ativos (Força de Trabalho)", default=0)
+    fechado = models.BooleanField("Mês Fechado", default=False, db_index=True)
+    data_fechamento = models.DateTimeField("Data de Fechamento", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Headcount Mensal da Loja"
+        verbose_name_plural = "Headcounts Mensais das Lojas"
+        constraints = [
+            UniqueConstraint(
+                fields=["loja", "ano", "mes"],
+                name="unique_headcount_mensal_loja_ano_mes",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["ano", "mes"]),
+            models.Index(fields=["loja", "ano", "mes"]),
+        ]
+
+    def __str__(self):
+        return f"{self.loja} - {self.mes:02d}/{self.ano}: {self.total_ativos} ativos ({'Fechado' if self.fechado else 'Aberto'})"
+
+
 
 def montar_caches_salario_para_itens(itens):
     """

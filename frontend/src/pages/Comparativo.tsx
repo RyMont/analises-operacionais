@@ -68,7 +68,9 @@ export default function Comparativo() {
   const [kpis, setKpis] = useState({
     orcado_total: 0,
     realizado_total: 0,
-    desvio_total: 0
+    desvio_total: 0,
+    colaboradores_receberam_total: 0,
+    funcionarios_total: 0
   });
   const [graficos, setGraficos] = useState({
     mensal: [] as { mes: string; orcado: number; realizado: number; desvio: number }[],
@@ -153,7 +155,13 @@ export default function Comparativo() {
         if (response.data) {
           const results = response.data.results || {};
           setResultados(results.resultados || []);
-          setKpis(results.kpis || { orcado_total: 0, realizado_total: 0, desvio_total: 0 });
+          setKpis(results.kpis || {
+            orcado_total: 0,
+            realizado_total: 0,
+            desvio_total: 0,
+            colaboradores_receberam_total: 0,
+            funcionarios_total: 0
+          });
           setGraficos(results.graficos || { mensal: [], coordenador: [], uf: [] });
           
           const count = response.data.count || 0;

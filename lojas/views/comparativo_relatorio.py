@@ -23,12 +23,14 @@ from lojas.models import (
     ItemEscopoMensal,
     LinhaFolha,
     ResumoFolhaMensal,
+    HeadcountMensalLoja,
     Verba,
     ConfiguracaoInsalubridadeLoja,
     obter_ou_criar_config_insalubridade_loja,
     escala_insalubridade_fixa_para_escopo,
     montar_caches_salario_para_itens,
 )
+from lojas.services.headcount_sra import calcular_forca_trabalho_lojas
 from lojas.services.verbas_de_para import obter_info_verba
 from lojas.serializers import LojaSerializer
 
@@ -444,6 +446,50 @@ def _calcular_dados_comparativo_relatorio(request):
             coord_map[coordenador_nome] += desvio_loja_comp
             uf_map[uf_sigla] += desvio_loja_comp
 
+    # 6. Cálculo dos Totais de Colaboradores (Receberam Verba vs Força de Trabalho Ativa)
+    colaboradores_receberam_total = 0
+    funcionarios_total = 0
+
+    if lojas_filtradas_ids:
+        # Colaboradores distintos que receberam alguma verba no período filtrado
+        if datas_exatas:
+            colaboradores_receberam_total = (
+                LinhaFolha.objects.filter(
+                    loja_id__in=lojas_filtradas_ids,
+                    dt_arq__in=datas_exatas,
+                    valor__gt=0,
+                )
+                .values("matricula")
+                .distinct()
+                .count()
+            )
+
+        # Força de trabalho total das filiais no período de referência
+        # Se houver múltiplas competências (ex: todas), usa a mais recente da lista
+        comp_alvo_ano, comp_alvo_mes = (
+            competencias_list[0]
+            if competencias_list
+            else (datetime.date.today().year, datetime.date.today().month)
+        )
+
+        headcounts_qs = HeadcountMensalLoja.objects.filter(
+            loja_id__in=lojas_filtradas_ids,
+            ano=comp_alvo_ano,
+            mes=comp_alvo_mes,
+        ).values("loja_id", "total_ativos")
+
+        mapa_headcounts = {h["loja_id"]: h["total_ativos"] for h in headcounts_qs}
+
+        # Fallback para lojas sem snapshot naquela competência
+        lojas_sem_snapshot = [lid for lid in lojas_filtradas_ids if lid not in mapa_headcounts]
+        if lojas_sem_snapshot:
+            mapa_fallback = calcular_forca_trabalho_lojas(
+                comp_alvo_ano, comp_alvo_mes, lojas_ids=lojas_sem_snapshot
+            )
+            mapa_headcounts.update(mapa_fallback)
+
+        funcionarios_total = sum(mapa_headcounts.get(lid, 0) for lid in lojas_filtradas_ids)
+
     return (
         combinacoes,
         escopo_total,
@@ -452,6 +498,8 @@ def _calcular_dados_comparativo_relatorio(request):
         coord_map,
         uf_map,
         competencias_list,
+        colaboradores_receberam_total,
+        funcionarios_total,
     )
 
 
@@ -470,6 +518,8 @@ def comparativo_relatorio_api(request):
         coord_map,
         uf_map,
         competencias_list,
+        colaboradores_receberam_total,
+        funcionarios_total,
     ) = _calcular_dados_comparativo_relatorio(request)
 
     # Pagina os resultados
@@ -515,7 +565,9 @@ def comparativo_relatorio_api(request):
             "kpis": {
                 "orcado_total": float(escopo_total),
                 "realizado_total": float(folha_total),
-                "desvio_total": float(folha_total - escopo_total)
+                "desvio_total": float(folha_total - escopo_total),
+                "colaboradores_receberam_total": int(colaboradores_receberam_total),
+                "funcionarios_total": int(funcionarios_total),
             },
             "graficos": {
                 "mensal": dados_grafico_mensal,
@@ -544,6 +596,7 @@ def comparativo_relatorio_exportar_excel(request):
         coord_map,
         uf_map,
         competencias_list,
+        *_,
     ) = _calcular_dados_comparativo_relatorio(request)
 
     if not combinacoes:

@@ -652,6 +652,13 @@ def importar_colaboradores_de_texto(conteudo_csv: str, progress_callback=None) -
             )
             logger.info("%d colaboradores atualizados em lote", len(para_atualizar))
 
+    # Etapa 6: Snapshot de Headcount Mensal por Loja (SRA)
+    try:
+        from lojas.services.headcount_sra import registrar_snapshot_headcount_sra
+        registrar_snapshot_headcount_sra()
+    except Exception:
+        logger.exception("Erro ao registrar snapshot de headcount da SRA após importação")
+
     if progress_callback:
         progress_callback(100, "Importação concluída!")
     
