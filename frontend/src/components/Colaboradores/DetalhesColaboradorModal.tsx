@@ -209,6 +209,10 @@ export default function DetalhesColaboradorModal({
                     Função: <strong className="text-neutral-800 dark:text-neutral-200">{colab.cargo || 'Não informado'}</strong>
                   </span>
                 )}
+                <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200/60 dark:border-neutral-750 flex flex-col gap-0.5">
+                  <span>Coord: <strong className="text-neutral-700 dark:text-neutral-300">{colab.loja_coordenador || colab.coordenador || '-'}</strong></span>
+                  <span>Superv: <strong className="text-neutral-700 dark:text-neutral-300">{colab.loja_supervisor || colab.supervisor || '-'}</strong></span>
+                </div>
               </div>
 
               {/* Gestão Pessoas */}
@@ -228,6 +232,10 @@ export default function DetalhesColaboradorModal({
                 <span className="block text-[10px] text-neutral-500">
                   Função: {colab.funcao_gestao || 'Em branco'}
                 </span>
+                <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200/60 dark:border-neutral-750 flex flex-col gap-0.5">
+                  <span>Coord: <strong className="text-neutral-700 dark:text-neutral-300">{colab.loja_gestao_coordenador || '-'}</strong></span>
+                  <span>Superv: <strong className="text-neutral-700 dark:text-neutral-300">{colab.loja_gestao_supervisor || '-'}</strong></span>
+                </div>
               </div>
 
               {/* GeoVictoria */}

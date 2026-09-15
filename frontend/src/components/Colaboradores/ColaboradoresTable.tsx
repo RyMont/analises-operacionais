@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, FileCheck2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, FileCheck2, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import {
   Pagination,
@@ -26,6 +26,12 @@ export interface Colaborador {
   loja_nome: string | null;
   loja_gestao_nome: string | null;
   loja_geo_nome: string | null;
+  loja_coordenador?: string | null;
+  loja_supervisor?: string | null;
+  loja_gestao_coordenador?: string | null;
+  loja_gestao_supervisor?: string | null;
+  coordenador?: string | null;
+  supervisor?: string | null;
   is_divergente: boolean;
   funcao_divergente: boolean;
   loja_gestao_divergente: boolean;
@@ -41,6 +47,8 @@ interface ColaboradoresTableProps {
   count: number;
   setCurrentPage: (page: number) => void;
   onOpenDetail: (colab: Colaborador) => void;
+  onExportarExcel?: () => void;
+  isExporting?: boolean;
 }
 
 /**
@@ -48,7 +56,8 @@ interface ColaboradoresTableProps {
  * 
  * Por que existe: Exibe a lista de profissionais cruzando os status do TOTVS, 
  * da planilha de Gestão de Pessoas e do relógio de ponto (GeoVictoria).
- * Apresenta badges de alerta se houver divergências e gerencia a paginação.
+ * Apresenta coordenador, supervisor, badges de alerta se houver divergências,
+ * botão de exportar planilha Excel (.xlsx) e gerencia a paginação.
  */
 export default function ColaboradoresTable({
   activeTab,
@@ -59,18 +68,50 @@ export default function ColaboradoresTable({
   count,
   setCurrentPage,
   onOpenDetail,
+  onExportarExcel,
+  isExporting = false,
 }: ColaboradoresTableProps) {
 
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xs shadow-sm overflow-hidden">
+      {/* Barra de título e botão de exportação da tabela */}
+      <div className="p-4 sm:px-6 sm:py-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-sm text-neutral-900 dark:text-neutral-100">
+            {activeTab === 'ativos' ? 'Base de Colaboradores Ativos' : 'Base de Colaboradores Demitidos'}
+          </h3>
+          <p className="text-xs text-neutral-500">
+            Total nesta seleção: <span className="font-bold text-neutral-900 dark:text-neutral-100">{count}</span> colaboradores
+          </p>
+        </div>
+        {onExportarExcel && (
+          <button
+            type="button"
+            onClick={onExportarExcel}
+            disabled={loading || count === 0 || isExporting}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            title="Exportar colaboradores filtrados para Excel (.xlsx)"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <span>{isExporting ? 'Exportando...' : 'Exportar para Excel'}</span>
+          </button>
+        )}
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100 text-xs font-bold text-neutral-700 uppercase tracking-wider">
+            <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-850 text-xs font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider">
               <th className="py-4 px-6">Matrícula (RE)</th>
               <th className="py-4 px-6">Colaborador</th>
               <th className="py-4 px-6">Função (TOTVS / Gestão)</th>
               <th className="py-4 px-6">Lotação (TOTVS / Gestão / Geo)</th>
+              <th className="py-4 px-6">Coordenador</th>
+              <th className="py-4 px-6">Supervisor</th>
               <th className="py-4 px-6">Status (TOTVS / Gestão)</th>
               <th className="py-4 px-6 text-right">Auditoria</th>
             </tr>
@@ -96,6 +137,14 @@ export default function ColaboradoresTable({
                     <Skeleton className="h-3 w-20" />
                   </td>
                   <td className="py-4 px-6 space-y-1">
+                    <Skeleton className="h-4 w-28 mb-1" />
+                    <Skeleton className="h-3 w-16" />
+                  </td>
+                  <td className="py-4 px-6 space-y-1">
+                    <Skeleton className="h-4 w-28 mb-1" />
+                    <Skeleton className="h-3 w-16" />
+                  </td>
+                  <td className="py-4 px-6 space-y-1">
                     <Skeleton className="h-5 w-16" />
                     <Skeleton className="h-3 w-12" />
                   </td>
@@ -106,7 +155,7 @@ export default function ColaboradoresTable({
               ))
             ) : colaboradores.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-neutral-400">
+                <td colSpan={8} className="py-10 text-center text-neutral-400">
                   Nenhum colaborador encontrado com esta configuração de filtros.
                 </td>
               </tr>
@@ -121,7 +170,7 @@ export default function ColaboradoresTable({
                     {colab.re}
                   </td>
                   <td className="py-4 px-6 min-w-0">
-                    <div 
+                    <div
                       className="font-semibold text-neutral-900 dark:text-neutral-100 truncate block"
                       title={colab.nome}
                     >
@@ -166,6 +215,30 @@ export default function ColaboradoresTable({
                           {colab.loja_geo_nome || 'Em branco'}
                         </div>
                       </>
+                    )}
+                  </td>
+                  {/* Coordenador */}
+                  <td className="py-4 px-6 space-y-1">
+                    <div className="text-xs font-medium text-neutral-850 dark:text-neutral-200">
+                      {colab.coordenador || colab.loja_coordenador || colab.loja_gestao_coordenador || '-'}
+                    </div>
+                    {activeTab === 'ativos' && colab.loja_gestao_coordenador && colab.loja_coordenador && colab.loja_gestao_coordenador !== colab.loja_coordenador && (
+                      <div className="text-[10px] text-neutral-550 dark:text-neutral-400">
+                        <span className="font-semibold text-neutral-500 dark:text-neutral-450">Gestão:</span>{' '}
+                        {colab.loja_gestao_coordenador}
+                      </div>
+                    )}
+                  </td>
+                  {/* Supervisor */}
+                  <td className="py-4 px-6 space-y-1">
+                    <div className="text-xs font-medium text-neutral-850 dark:text-neutral-200">
+                      {colab.supervisor || colab.loja_supervisor || colab.loja_gestao_supervisor || '-'}
+                    </div>
+                    {activeTab === 'ativos' && colab.loja_gestao_supervisor && colab.loja_supervisor && colab.loja_gestao_supervisor !== colab.loja_supervisor && (
+                      <div className="text-[10px] text-neutral-550 dark:text-neutral-400">
+                        <span className="font-semibold text-neutral-500 dark:text-neutral-450">Gestão:</span>{' '}
+                        {colab.loja_gestao_supervisor}
+                      </div>
                     )}
                   </td>
                   <td className="py-4 px-6 space-y-1.5">

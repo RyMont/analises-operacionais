@@ -39,12 +39,14 @@ class ColaboradorSerializer(serializers.ModelSerializer):
     funcao_divergente = serializers.SerializerMethodField()
     
     loja_nome = serializers.SerializerMethodField()
-    loja_coordenador = serializers.CharField(source="loja.coordenador.nome", read_only=True)
+    loja_coordenador = serializers.SerializerMethodField()
     loja_supervisor = serializers.SerializerMethodField()
     loja_gestao_nome = serializers.SerializerMethodField()
     loja_gestao_coordenador = serializers.SerializerMethodField()
     loja_gestao_supervisor = serializers.SerializerMethodField()
     loja_geo_nome = serializers.SerializerMethodField()
+    coordenador = serializers.SerializerMethodField()
+    supervisor = serializers.SerializerMethodField()
 
     class Meta:
         model = Colaborador
@@ -58,12 +60,46 @@ class ColaboradorSerializer(serializers.ModelSerializer):
             return obj.loja.nome_totvs or obj.loja.nome_referencia
         return None
 
+    def get_loja_coordenador(self, obj):
+        """
+        Retorna o nome do coordenador associado à loja física TOTVS do colaborador.
+        """
+        if obj.loja and obj.loja.coordenador:
+            return obj.loja.coordenador.nome
+        return None
+
     def get_loja_supervisor(self, obj):
         """
         Retorna o nome do supervisor associado à loja do colaborador.
         """
         if obj.loja and obj.loja.supervisor:
             return obj.loja.supervisor.nome
+        return None
+
+    def get_coordenador(self, obj):
+        """
+        Retorna o coordenador resolvido (TOTVS -> Gestão de Pessoas -> fallback por Centro de Custo).
+        """
+        if obj.loja and obj.loja.coordenador:
+            return obj.loja.coordenador.nome
+        loja_resolvida = obj.loja_gestao
+        if not loja_resolvida and obj.centro_custo:
+            loja_resolvida = obter_loja_por_cc(obj.centro_custo)
+        if loja_resolvida and loja_resolvida.coordenador:
+            return loja_resolvida.coordenador.nome
+        return None
+
+    def get_supervisor(self, obj):
+        """
+        Retorna o supervisor resolvido (TOTVS -> Gestão de Pessoas -> fallback por Centro de Custo).
+        """
+        if obj.loja and obj.loja.supervisor:
+            return obj.loja.supervisor.nome
+        loja_resolvida = obj.loja_gestao
+        if not loja_resolvida and obj.centro_custo:
+            loja_resolvida = obter_loja_por_cc(obj.centro_custo)
+        if loja_resolvida and loja_resolvida.supervisor:
+            return loja_resolvida.supervisor.nome
         return None
 
     def get_loja_gestao_nome(self, obj):

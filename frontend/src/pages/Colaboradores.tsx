@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Loader2, Users2, UserX2, Layers, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import api, { getBackendPort } from '../api/client';
 import { Progress, ProgressValue } from '../components/ui/progress';
 import ColaboradoresFilter from '../components/Colaboradores/ColaboradoresFilter';
@@ -224,6 +225,69 @@ export default function Colaboradores() {
     setFetchTrigger(prev => prev + 1);
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Exportação dos dados dos colaboradores filtrados para planilha Excel (.xlsx)
+  const handleExportarExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      params.append('tipo', activeTab);
+      if (reBusca) params.append('re', reBusca);
+      if (cpfBusca) params.append('cpf', cpfBusca);
+      if (nomeBusca) params.append('nome', nomeBusca);
+      if (cargoFiltro) params.append('cargo', cargoFiltro);
+      if (lojaFiltro) params.append('loja', lojaFiltro);
+      if (activeTab === 'ativos' && statusFiltro) params.append('status', statusFiltro);
+      if (statusGestaoFiltro) params.append('status_gestao', statusGestaoFiltro);
+      if (statusDivergenteQuery) params.append('status_divergente', statusDivergenteQuery);
+      if (activeTab === 'ativos') {
+        if (funcaoDivergenteQuery) params.append('funcao_divergente', funcaoDivergenteQuery);
+        if (divergenteQuery) params.append('divergente', divergenteQuery);
+        if (soTotvsQuery) params.append('so_totvs', soTotvsQuery);
+      }
+
+      const response = await api.get(`/colaboradores/exportar/?${params.toString()}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const dataHoje = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `base_colaboradores_${activeTab}_${dataHoje}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      toast.success('Planilha exportada com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao exportar base de colaboradores para Excel:', err);
+      // Fallback via URL direta
+      const params = new URLSearchParams();
+      params.append('tipo', activeTab);
+      if (reBusca) params.append('re', reBusca);
+      if (cpfBusca) params.append('cpf', cpfBusca);
+      if (nomeBusca) params.append('nome', nomeBusca);
+      if (cargoFiltro) params.append('cargo', cargoFiltro);
+      if (lojaFiltro) params.append('loja', lojaFiltro);
+      if (activeTab === 'ativos' && statusFiltro) params.append('status', statusFiltro);
+      if (statusGestaoFiltro) params.append('status_gestao', statusGestaoFiltro);
+      if (statusDivergenteQuery) params.append('status_divergente', statusDivergenteQuery);
+      if (activeTab === 'ativos') {
+        if (funcaoDivergenteQuery) params.append('funcao_divergente', funcaoDivergenteQuery);
+        if (divergenteQuery) params.append('divergente', divergenteQuery);
+        if (soTotvsQuery) params.append('so_totvs', soTotvsQuery);
+      }
+      const url = `http://${window.location.hostname}:${getBackendPort()}/colaboradores/exportar/?${params.toString()}`;
+      window.open(url, '_blank');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleOpenDetail = (colab: Colaborador) => {
     setSelectedColab(colab);
     setShowDetailModal(true);
@@ -388,6 +452,8 @@ export default function Colaboradores() {
         count={count}
         setCurrentPage={setCurrentPage}
         onOpenDetail={handleOpenDetail}
+        onExportarExcel={handleExportarExcel}
+        isExporting={isExporting}
       />
 
       {/* Modal Ficha do Colaborador (Detalhes completos) */}

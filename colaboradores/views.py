@@ -7,6 +7,7 @@ from .view_utils import (
 from .views_listas import (
     colaborador_list,
     demitido_list,
+    colaborador_exportar_excel,
     status_gestao_opcoes,
     colaborador_filtro_opcoes,
     colaborador_atribuir_cargo_api,
@@ -38,6 +39,7 @@ __all__ = [
     "colaborador_geovictoria_summary",
     "colaborador_list",
     "demitido_list",
+    "colaborador_exportar_excel",
     "status_gestao_opcoes",
     "colaborador_filtro_opcoes",
     "colaborador_atribuir_cargo_api",

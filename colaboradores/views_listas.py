@@ -1,22 +1,24 @@
+from io import BytesIO
+from datetime import date
+import re
+import pandas as pd
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
-import re
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from usuarios.permissions import IsGestaoOrAdministrador
 
 from lojas.models import Loja, Cargo
 from lojas.serializers import LojaSerializer
 
 from .models import Colaborador
-from .serializers import ColaboradorSerializer
+from .serializers import ColaboradorSerializer, obter_loja_por_cc
 from .view_utils import funcao_esta_divergente
-
-
-from rest_framework.pagination import PageNumberPagination
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
@@ -48,7 +50,10 @@ def demitido_list(request):
     filtros = _ler_filtros_demitidos(request.GET)
     colaboradores_qs = Colaborador.objects.filter(status="D").exclude(
         cargo="AUXILIAR ADMINISTRAT"
-    ).select_related("loja")
+    ).select_related(
+        "loja", "loja__coordenador", "loja__supervisor",
+        "loja_gestao", "loja_gestao__coordenador", "loja_gestao__supervisor"
+    )
 
     colaboradores_qs = _aplicar_filtros_demitidos(colaboradores_qs, filtros)
 
@@ -61,6 +66,147 @@ def demitido_list(request):
 
     serializer = ColaboradorSerializer(colaboradores_qs, many=True)
     return Response(serializer.data)
+
+
+def _resolver_lideranca(colab):
+    """
+    Retorna a tupla (coordenador, supervisor) resolvendo primeiro pela loja física TOTVS,
+    depois pela loja de Gestão e, por fim, pelo Centro de Custo.
+    """
+    coord = "-"
+    superv = "-"
+    if colab.loja and colab.loja.coordenador:
+        coord = colab.loja.coordenador.nome
+    elif colab.loja_gestao and colab.loja_gestao.coordenador:
+        coord = colab.loja_gestao.coordenador.nome
+    elif colab.centro_custo:
+        l = obter_loja_por_cc(colab.centro_custo)
+        if l and l.coordenador:
+            coord = l.coordenador.nome
+
+    if colab.loja and colab.loja.supervisor:
+        superv = colab.loja.supervisor.nome
+    elif colab.loja_gestao and colab.loja_gestao.supervisor:
+        superv = colab.loja_gestao.supervisor.nome
+    elif colab.centro_custo:
+        l = obter_loja_por_cc(colab.centro_custo)
+        if l and l.supervisor:
+            superv = l.supervisor.nome
+
+    return coord, superv
+
+
+def _formatar_status_totvs(status_val):
+    """
+    Normaliza a sigla do status TOTVS para texto legível em relatórios.
+    """
+    s = (status_val or "").strip().upper()
+    if not s or s == "ATIVO":
+        return "ATIVO"
+    if s == "A":
+        return "AFASTADO"
+    if s == "F":
+        return "FÉRIAS"
+    if s == "D":
+        return "DEMITIDO"
+    return s
+
+
+def _computar_auditoria(colab, tipo):
+    """
+    Retorna o status de auditoria/divergência do colaborador para o relatório.
+    """
+    if tipo == "demitidos":
+        return "Ficha Demitida"
+    divergencias = []
+    if funcao_esta_divergente(colab):
+        divergencias.append("Função Divergente")
+    if colab.loja_gestao_divergente:
+        divergencias.append("Gestão Diferente")
+    if colab.loja_geo_divergente:
+        divergencias.append("Geo Victoria Diferente")
+    return ", ".join(divergencias) if divergencias else "Conciliado"
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsGestaoOrAdministrador])
+def colaborador_exportar_excel(request):
+    """
+    Exporta a base de colaboradores (ativos ou demitidos) filtrada para planilha Excel (.xlsx).
+    Inclui todas as informações cadastrais, lotações cruzadas, Coordenador, Supervisor e auditoria.
+    """
+    tipo = request.GET.get("tipo", "ativos").lower().strip()
+    if tipo not in ["ativos", "demitidos"]:
+        tipo = "ativos"
+
+    if tipo == "demitidos":
+        filtros = _ler_filtros_demitidos(request.GET)
+        colaboradores_qs = Colaborador.objects.filter(status="D").exclude(
+            cargo="AUXILIAR ADMINISTRAT"
+        ).select_related(
+            "loja", "loja__coordenador", "loja__supervisor",
+            "loja_gestao", "loja_gestao__coordenador", "loja_gestao__supervisor"
+        )
+        colaboradores_qs = _aplicar_filtros_demitidos(colaboradores_qs, filtros)
+    else:
+        filtros = _ler_filtros_colaboradores(request.GET)
+        colaboradores_qs = _buscar_colaboradores_ativos()
+        colaboradores_qs = _aplicar_filtros_colaboradores(colaboradores_qs, filtros)
+
+    linhas_excel = []
+    for c in colaboradores_qs:
+        coord_nome, super_nome = _resolver_lideranca(c)
+        data_adm_str = c.data_admissao.strftime("%d/%m/%Y") if c.data_admissao else "-"
+        data_dem_str = c.data_demissao.strftime("%d/%m/%Y") if c.data_demissao else "-"
+
+        linha = {
+            "Matrícula (RE)": c.re,
+            "Colaborador": c.nome,
+            "CPF": c.cpf or "-",
+            "Função TOTVS": c.cargo or "-",
+            "Função Gestão": c.funcao_gestao or "-",
+            "Lotação TOTVS": c.loja.nome_totvs or c.loja.nome_referencia if c.loja else (c.centro_custo or "-"),
+            "Lotação Gestão": c.loja_gestao.nome_referencia if c.loja_gestao else "-",
+            "Lotação GeoVictoria": c.loja_geo.nome_geovictoria if c.loja_geo else "-",
+            "Coordenador": coord_nome,
+            "Supervisor": super_nome,
+            "Status TOTVS": _formatar_status_totvs(c.status),
+            "Status Gestão": c.status_gestao or "-",
+            "Data Admissão": data_adm_str,
+        }
+        if tipo == "demitidos":
+            linha["Data Demissão"] = data_dem_str
+            linha["Motivo Demissão"] = c.motivo_demissao or "Não Informado"
+        linha["Auditoria"] = _computar_auditoria(c, tipo)
+        linhas_excel.append(linha)
+
+    if not linhas_excel:
+        return Response(
+            {"error": "Não há colaboradores para exportar com os filtros selecionados."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    df = pd.DataFrame(linhas_excel)
+    buffer = BytesIO()
+    sheet_name = "Colaboradores Ativos" if tipo == "ativos" else "Colaboradores Demitidos"
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        worksheet = writer.sheets[sheet_name]
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+    buffer.seek(0)
+    data_hoje = date.today().strftime("%d_%m_%Y")
+    filename = f"base_colaboradores_{tipo}_{data_hoje}.xlsx"
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 @api_view(["GET"])
@@ -152,7 +298,11 @@ def _buscar_colaboradores_ativos():
     """
     return Colaborador.objects.exclude(status="D").exclude(
         cargo="AUXILIAR ADMINISTRAT"
-    ).select_related("loja", "loja_gestao", "loja_geo")
+    ).select_related(
+        "loja", "loja__coordenador", "loja__supervisor",
+        "loja_gestao", "loja_gestao__coordenador", "loja_gestao__supervisor",
+        "loja_geo"
+    )
 
 
 def _aplicar_filtros_colaboradores(colaboradores_qs, filtros):
